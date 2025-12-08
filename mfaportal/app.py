@@ -1,31 +1,34 @@
 from flask import Flask, request, render_template, redirect, url_for, session
 
+from database import DatabaseManager
+from auth import AuthManager
 
 app = Flask(__name__)
+DbMgr = DatabaseManager()
+AuthMgr = AuthManager()
 
-@app.get("/")
-def authorize_get():
+
+# Redirect users to login page
+@app.route("/", methods=["GET"])
+def redirect_to_login():
     return redirect("/login")
 
-@app.get("/login")
+
+@app.route("/login", methods=["GET"])
 def login_get():
     return render_template("login.html")
-    
-@app.post("/login")
+
+
+@app.route("/login", methods=["POST"])
 def login_post():
     email = request.form["email"]
     password = request.form["password"]
-
-    # Simpele validatie (in realiteit zou je hier een database check doen)
-    # user = users.get(email)
-    # if not user or not check_password_hash(user["password_hash"], password):
-    #     return render_template("login.html", error="Incorrect information")
 
     session["pending_user"] = email
     return redirect(url_for("mfa_get"))
 
 
-@app.get("/mfa")
+@app.route("/mfa", methods=["GET"])
 def mfa_get():
     # als er geen pending_user is dan terug naar login
     if "pending_user" not in session:
