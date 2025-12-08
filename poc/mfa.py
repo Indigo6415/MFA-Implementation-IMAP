@@ -27,7 +27,7 @@ class TOTP:
 
         # Component 1
         # Time counter (number of intervals since epoch)
-        counter = int(time.time() // interval)
+        counter = int(time.time() // interval)  # 1928571
 
         # Component 2
         # 8-byte big-endian counter per RFC4226/RFC6238
@@ -43,8 +43,8 @@ class TOTP:
             ">I", hmac_digest[offset:offset + 4])[0] & 0x7FFFFFFF
 
         # Reduce to requested number of digits and zero-pad
-        totp = code_int % (10 ** digits)
-        return f"{totp:0{digits}d}"
+        totp = code_int % (10 ** digits)  # code_int % 1000000
+        return f"{totp:0{digits}d}"  # 123984 e.g.
 
     def verify(self, token):
         """
@@ -121,4 +121,5 @@ if __name__ == "__main__":
     # Interactive TOTP verification
     while True:
         user_totp = input("Enter TOTP code to verify: ")
-        print(f"TOTP verification: {totp.verify(user_totp)}")
+        print(
+            f"TOTP verification: {"Valid" if totp.verify(user_totp) else "Invalid"}")
