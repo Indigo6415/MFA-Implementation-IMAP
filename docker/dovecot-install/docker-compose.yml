@@ -1,0 +1,18 @@
+version: "3.9"
+services:
+  dovecot:
+    build: .
+    container_name: dovecot
+    ports:
+      - "143:143"
+      - "993:993"
+      - "110:110"
+      - "995:995"
+    volumes:
+      - ./conf.d:/etc/dovecot/conf.d:ro
+      - maildata:/var/mail
+      - ./checkpassword-http.sh:/etc/dovecot/scripts/checkpassword-http.sh
+    restart: unless-stopped
+
+volumes:
+  maildata:

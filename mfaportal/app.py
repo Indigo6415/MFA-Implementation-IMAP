@@ -1,9 +1,11 @@
 from flask import Flask, request, render_template, redirect, url_for, session
+import os
 
 from database import DatabaseManager
 from auth import AuthManager
 
 app = Flask(__name__)
+app.secret_key = os.urandom(24)
 DbMgr = DatabaseManager()
 AuthMgr = AuthManager()
 
@@ -35,3 +37,7 @@ def mfa_get():
         return redirect("/login")
 
     return render_template("mfa.html")
+
+
+if __name__ == "__main__":
+    app.run(debug=True)
