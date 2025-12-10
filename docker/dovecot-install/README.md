@@ -1,5 +1,5 @@
 # Installation
-1) Start docker container `docker compose up -d --build`
+1) Start docker container `docker-compose up -d --build`
 2) Spin up http server using `python3 -m http.server 8080`
 
 # Usage
