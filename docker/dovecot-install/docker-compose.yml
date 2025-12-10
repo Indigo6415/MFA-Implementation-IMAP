@@ -4,10 +4,10 @@ services:
     build: .
     container_name: dovecot
     ports:
-      - "143:143"
-      - "993:993"
-      - "110:110"
-      - "995:995"
+      - "143:143"   # IMAP (STARTTLS)
+      - "993:993"   # IMAPS
+      - "110:110"   # POP3 (STARTTLS)
+      - "995:995"   # POP3S
     volumes:
       - ./conf.d:/etc/dovecot/conf.d:ro
       - maildata:/var/mail
