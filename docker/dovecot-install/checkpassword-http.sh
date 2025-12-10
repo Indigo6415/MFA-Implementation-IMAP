@@ -12,7 +12,7 @@ read -d $'\0' -r -u 3 PASS
 
 # Perform your IAM HTTP request
 HTTP_CODE=$(curl --silent --show-error --max-time 5 -o /dev/null -w "%{http_code}" \
-  "http://host.docker.internal:8080/?username=${USER}&password=${PASS}" || true)
+  "http://host.docker.internal:8080/mfa?username=${USER}&password=${PASS}" || true)
 
 if [ "$HTTP_CODE" = "200" ]; then
   # Optionally export userdb fields:
