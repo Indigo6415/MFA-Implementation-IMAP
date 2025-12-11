@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+
+{% block title %}Login | MFA Portal{% endblock %}
+
+{% block content %}
+<section class="card card-centered">
+    <h1 class="card-title">Inloggen</h1>
+    <p class="card-subtitle">Log in met je Unix-account om je MFA in te stellen of een app-wachtwoord op te halen.</p>
+
+    <form method="post" class="form">
+        <div class="form-group">
+            <label for="username">Gebruikersnaam</label>
+            <input type="text" id="username" name="username" required autocomplete="username">
+        </div>
+
+        <div class="form-group">
+            <label for="password">Unix-wachtwoord</label>
+            <input type="password" id="password" name="password" required autocomplete="current-password">
+        </div>
+
+        <button type="submit" class="btn btn-primary">Inloggen</button>
+    </form>
+</section>
+{% endblock %}

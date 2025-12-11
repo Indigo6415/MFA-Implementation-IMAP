@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+
+{% block title %}
+  {% if mode == "init" %}MFA initialiseren | MFA Portal{% else %}MFA verificatie | MFA Portal{% endif %}
+{% endblock %}
+
+{% block content %}
+<section class="card card-centered">
+  {% if mode == "init" %}
+    <h1 class="card-title">MFA initialiseren</h1>
+    <p class="card-subtitle">
+      Scan de QR-code met je authenticator-app voor gebruiker <strong>{{ username }}</strong>.
+    </p>
+
+    <div class="qr-wrapper">
+      <img src="data:image/png;base64,{{ qr }}" alt="MFA QR-code" class="qr-image">
+    </div>
+    <p class="qr-help">
+      Handmatige sleutel: <code>{{ secret }}</code>
+    </p>
+  {% else %}
+    <h1 class="card-title">MFA verificatie</h1>
+    <p class="card-subtitle">
+      Vul de 6-cijferige code in uit je authenticator-app voor
+      <strong>{{ username }}</strong>.
+    </p>
+  {% endif %}
+
+  <form method="post" class="form">
+    <div class="form-group">
+      <label for="code">Eenmalige code</label>
+      <input type="text" id="code" name="code" minlength="6" maxlength="6" inputmode="numeric" required>
+    </div>
+    <button type="submit" class="btn btn-primary">
+      {% if mode == "init" %}MFA activeren{% else %}Verifiëren{% endif %}
+    </button>
+  </form>
+</section>
+{% endblock %}
