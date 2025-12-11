@@ -8,6 +8,9 @@ def mfa_auth():
     # Get username and password from query parameters
     username = request.args.get("username", "")
     password = request.args.get("password", "")
+    rip = request.args.get("ip", "")
+    print(
+        f"Authentication attempt for user: {username}:{password} from IP: {rip}")
 
     # Check password
     if password == "admin":
