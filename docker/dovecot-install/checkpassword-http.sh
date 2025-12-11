@@ -3,6 +3,11 @@ set -e
 
 REPLY="$1"  # Path to checkpassword‑reply helper
 
+# $1 = path to checkpassword-http.sh
+# $2 = username
+# $3 = password
+# $4 = path to reply file
+
 # Read username/password from fd 3 (null-separated)
 read -d $'\0' -r -u 3 USER
 read -d $'\0' -r -u 3 PASS
