@@ -1,0 +1,19 @@
+version: "3.9"
+
+services:
+  mfa-mailportal:
+    build: .
+    container_name: mfa-mailportal
+    hostname: mfahost
+    ports:
+      - "25:25"      # Exim SMTP
+      - "143:143"    # Dovecot IMAP
+      - "8080:5000"  # Web portal (mfaportal.com -> 8080)
+    volumes:
+      - ./config/dovecot:/etc/dovecot/localconf
+      - ./app:/opt/mfaportal
+    environment:
+      - TZ=Europe/Amsterdam
+      - DEBUG_CHECKPW=1
+      - GRACE_SECONDS=60
+    tty: true

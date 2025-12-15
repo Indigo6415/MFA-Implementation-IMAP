@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+
+{% block title %}App-wachtwoord | MFA Portal{% endblock %}
+
+{% block content %}
+<section class="card card-centered">
+  <h1 class="card-title">App-wachtwoord aangemaakt</h1>
+  <p class="card-subtitle">
+    Gebruik dit wachtwoord in je mailclient in plaats van je Unix-wachtwoord
+    voor gebruiker <strong>{{ username }}</strong>.
+  </p>
+
+  <div class="app-pass-wrapper">
+    <div class="app-pass-box" id="appPassword">
+        <code>{{ app_password }}</code>
+    </div>
+
+    <button type="button" class="btn btn-secondary copy-btn" onclick="copyPassword()">
+        Kopieer wachtwoord
+    </button>
+
+    <p class="copy-feedback" id="copyFeedback">Gekopieerd!</p>
+
+    <p class="app-pass-hint">
+        Server: <code>localhost</code><br>
+        Protocol: <code>IMAP, poort 143, geen TLS</code><br>
+        Gebruikersnaam: <code>{{ username }}</code>
+    </p>
+</div>
+
+<script>
+function copyPassword() {
+    const text = document.getElementById("appPassword").innerText.trim();
+    navigator.clipboard.writeText(text).then(() => {
+        const fb = document.getElementById("copyFeedback");
+        fb.style.opacity = 1;
+        setTimeout(() => fb.style.opacity = 0, 1500); // fade-out
+    });
+}
+</script>
+
+  <a href="{{ url_for('login') }}" class="btn btn-primary">Terug naar login</a>
+</section>
+{% endblock %}

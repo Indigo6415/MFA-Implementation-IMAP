@@ -1,0 +1,6 @@
+Flask
+pyotp
+python-pam
+six
+qrcode
+pillow

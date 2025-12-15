@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="nl">
+<head>
+    <meta charset="utf-8">
+    <title>{% block title %}MFA Portal{% endblock %}</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+    <!-- Basic meta -->
+    <meta name="description" content="MFA Portal voor veilige toegang tot e-mail en services.">
+    <meta name="author" content="ProjectMFA">
+
+    <!-- Open Graph (nice bij sharing) -->
+    <meta property="og:title" content="MFA Portal">
+    <meta property="og:description" content="Initieer MFA en beheer je app-wachtwoord voor veilige mailtoegang.">
+    <meta property="og:type" content="website">
+
+    <!-- Favicons -->
+    <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='img/favicon.ico') }}">
+    <link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='img/favicon-32x32.png') }}">
+    <link rel="icon" type="image/png" sizes="16x16" href="{{ url_for('static', filename='img/favicon-16x16.png') }}">
+    <link rel="apple-touch-icon" sizes="180x180" href="{{ url_for('static', filename='img/favicon-32x32.png') }}">
+
+    <!-- CSS -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <header class="topbar">
+        <div class="topbar-inner">
+            <div class="brand">
+                <!-- Als je een logo.svg hebt -->
+                {# <img src="{{ url_for('static', filename='img/logo.svg') }}" alt="MFA Portal logo" class="brand-logo"> #}
+                <span class="brand-title">MFA Portal</span>
+                <span class="brand-subtitle">Secure Mail Access</span>
+            </div>
+            <nav class="nav">
+                <a href="{{ url_for('login') }}" class="nav-link">Login</a>
+                <!-- optioneel: admin / about -->
+                {# <a href="{{ url_for('admin') }}" class="nav-link">Admin</a> #}
+            </nav>
+        </div>
+    </header>
+
+    <main class="page">
+        <div class="page-inner">
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    <div class="flash-container">
+                        {% for category, message in messages %}
+                            <div class="flash flash-{{ category }}">{{ message }}</div>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+            {% endwith %}
+
+            {% block content %}{% endblock %}
+        </div>
+    </main>
+
+    <footer class="footer">
+        <div class="footer-inner">
+            <span>&copy; {{ 2025 }} MFA Portal</span>
+            <span class="footer-muted">Proof-of-concept omgeving – niet voor productiegebruik.</span>
+        </div>
+    </footer>
+</body>
+</html>
