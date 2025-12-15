@@ -32,9 +32,41 @@ if [ ! -f mfa.db ]; then
   python3 -c "from app import init_db; init_db()" || echo "[start.sh] WARNING: DB init failed"
 fi
 
+# Zorg dat dovecot auth de DB kan lezen
+chown root:dovecot /opt/mfaportal/mfa.db || true
+chmod 640 /opt/mfaportal/mfa.db || true
+
 echo "[start.sh] Starting Flask app..."
 export FLASK_APP=app.py
 python3 app.py &
+
+# DB moet schrijfbaar zijn voor dovecot auth (UPDATE used_at + sqlite journal files)
+chown root:dovecot /opt/mfaportal/mfa.db || true
+chmod 660 /opt/mfaportal/mfa.db || true
+chown root:dovecot /opt/mfaportal || true
+chmod 775 /opt/mfaportal || true
+
+# sqlite writes require directory writable for journal/temp files
+chown root:dovecot /opt/mfaportal/mfa.db || true
+chmod 660 /opt/mfaportal/mfa.db || true
+chown root:dovecot /opt/mfaportal || true
+chmod 775 /opt/mfaportal || true
+
+# Cleanup elk uur: verwijder expired, of used waar grace voorbij is
+(
+  while true; do
+    sqlite3 /opt/mfaportal/mfa.db "
+      PRAGMA busy_timeout=5000;
+      DELETE FROM app_passwords
+      WHERE
+        expires_at <= CURRENT_TIMESTAMP
+        OR (used_at IS NOT NULL AND grace_until IS NOT NULL AND grace_until <= CURRENT_TIMESTAMP)
+        OR (used_at IS NOT NULL AND grace_until IS NULL);
+    " || true
+    sleep 3600
+  done
+) &
+
 
 echo "[start.sh] Tailing mail + dovecot logs..."
 tail -F /var/log/exim4/mainlog /var/log/dovecot.log

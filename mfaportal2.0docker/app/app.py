@@ -2,6 +2,9 @@ import os
 import sqlite3
 import secrets
 import base64
+import hashlib
+import hmac
+import datetime
 from io import BytesIO
 
 from flask import (
@@ -46,6 +49,61 @@ def init_db():
             mfa_initialized INTEGER DEFAULT 0
         )
     """)
+    c.execute("""
+    CREATE TABLE IF NOT EXISTS app_passwords (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        username TEXT NOT NULL,
+        password_hash TEXT NOT NULL,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        expires_at TEXT NOT NULL,
+        used_at TEXT
+    )
+    """)
+    c.execute("CREATE INDEX IF NOT EXISTS idx_app_pw_user ON app_passwords(username)")
+    conn.commit()
+    conn.close()
+
+def migrate_db():
+    """Zorg dat alle tabellen/kolommen bestaan (safe om meerdere keren te draaien)."""
+    conn = get_db()
+    c = conn.cursor()
+
+    # users (bestaat al in init_db, maar veilig)
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS users (
+            username TEXT PRIMARY KEY,
+            mfa_secret TEXT,
+            app_password TEXT,
+            mfa_initialized INTEGER DEFAULT 0
+        )
+    """)
+
+    # kolom mfa_initialized voor oude DB's
+    try:
+        c.execute("ALTER TABLE users ADD COLUMN mfa_initialized INTEGER DEFAULT 0")
+    except sqlite3.OperationalError:
+        pass
+
+    # NIEUW: app_passwords tabel + index
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS app_passwords (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT NOT NULL,
+            password_hash TEXT NOT NULL,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            expires_at TEXT NOT NULL,
+            used_at TEXT,
+            grace_until TEXT
+        )
+    """)
+    c.execute("CREATE INDEX IF NOT EXISTS idx_app_pw_user ON app_passwords(username)")
+
+    try:
+        c.execute("ALTER TABLE app_passwords ADD COLUMN grace_until TEXT")
+        conn.commit()
+    except sqlite3.OperationalError:
+        pass
+
     conn.commit()
     conn.close()
 
@@ -60,37 +118,28 @@ def get_user(username):
 
 
 def set_app_password(username, app_password):
-    """Sla app password op in SQLite én in /etc/dovecot/app-passwd."""
-    print(f"[set_app_password] Updating app-password for {username}...")
+    """Sla app password op in SQLite (hashed + expires)."""
+    pw_hash = hash_password(app_password)
+    expires_at = (datetime.datetime.utcnow() + datetime.timedelta(days=1)).strftime("%Y-%m-%d %H:%M:%S")
 
     conn = get_db()
     c = conn.cursor()
+
+    # Zorg dat user-record bestaat + markeer MFA init
     c.execute("""
         INSERT INTO users (username, mfa_secret, app_password, mfa_initialized)
-        VALUES (?, '', ?, 1)
-        ON CONFLICT(username) DO UPDATE SET
-            app_password=excluded.app_password,
-            mfa_initialized=1
-    """, (username, app_password))
+        VALUES (?, '', '', 1)
+        ON CONFLICT(username) DO UPDATE SET mfa_initialized=1
+    """, (username,))
+
+    # Nieuw one-time password record
+    c.execute("""
+        INSERT INTO app_passwords (username, password_hash, expires_at)
+        VALUES (?, ?, ?)
+    """, (username, pw_hash, expires_at))
+
     conn.commit()
     conn.close()
-
-    # /etc/dovecot/app-passwd bijwerken
-    lines = []
-    if os.path.exists(APP_PASSWD_FILE):
-        with open(APP_PASSWD_FILE, "r") as f:
-            lines = f.readlines()
-
-    # oude entries voor deze user verwijderen
-    lines = [l for l in lines if not l.startswith(f"{username}:")]
-
-    # nieuwe regel toevoegen
-    lines.append(f"{username}:{{PLAIN}}{app_password}\n")
-
-    with open(APP_PASSWD_FILE, "w") as f:
-        f.writelines(lines)
-
-    print(f"[set_app_password] Written {username} to {APP_PASSWD_FILE}")
 
 
 def get_or_create_secret(username):
@@ -127,6 +176,15 @@ def mark_mfa_initialized(username):
     c.execute("UPDATE users SET mfa_initialized = 1 WHERE username = ?", (username,))
     conn.commit()
     conn.close()
+
+def hash_password(pw: str, iterations: int = 200_000) -> str:
+    salt = os.urandom(16)
+    dk = hashlib.pbkdf2_hmac("sha256", pw.encode(), salt, iterations)
+    return "pbkdf2_sha256$%d$%s$%s" % (
+        iterations,
+        base64.b64encode(salt).decode(),
+        base64.b64encode(dk).decode(),
+    )
 
 
 # =========================
@@ -237,6 +295,7 @@ def mfa_challenge():
 if __name__ == "__main__":
     if not os.path.exists(DB_PATH):
         init_db()
+        migrate_db()
     else:
         # Voor het geval de tabel bestond zonder mfa_initialized,
         # proberen we een ALTER TABLE (stil falen als de kolom al bestaat).

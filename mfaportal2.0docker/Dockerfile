@@ -31,9 +31,16 @@ RUN sed -i 's/\r$//' /etc/exim4/update-exim4.conf.conf \
 # /var/mail rechten goed voor mbox + groep mail
 RUN chown root:mail /var/mail && chmod 2775 /var/mail
 
+COPY scripts/dovecot_checkpw.py /usr/local/bin/dovecot_checkpw.py
+RUN sed -i 's/\r$//' /usr/local/bin/dovecot_checkpw.py \
+ && chown root:root /usr/local/bin/dovecot_checkpw.py \
+ && chmod 755 /usr/local/bin/dovecot_checkpw.py
+
 # Dovecot config uit project kopiëren
 COPY config/dovecot/10-auth.conf /etc/dovecot/conf.d/10-auth.conf
+RUN sed -i 's/\r$//' /etc/dovecot/conf.d/10-auth.conf
 COPY config/dovecot/10-mail.conf /etc/dovecot/conf.d/10-mail.conf
+RUN sed -i 's/\r$//' /etc/dovecot/conf.d/10-mail.conf
 
 # Dovecot logging naar /var/log/dovecot.log
 RUN printf '\nlog_path = /var/log/dovecot.log\ninfo_log_path = /var/log/dovecot.log\n' >> /etc/dovecot/dovecot.conf
