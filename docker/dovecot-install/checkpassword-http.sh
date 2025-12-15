@@ -2,7 +2,8 @@
 set -e
 
 REMOTE_IP="$1"
-shift   # CRITICAL — removes %c so $@ is the backend command
+NEXT_FILE="$2"
+# shift   # CRITICAL — removes %c so $@ is the backend command
 
 IFS= read -r -d $'\0' -u 3 USER
 IFS= read -r -d $'\0' -u 3 PASS
@@ -13,7 +14,7 @@ HTTP_CODE=$(curl --silent --show-error --max-time 5 -o /dev/null \
   || true)
 
 if [ "$HTTP_CODE" = "200" ]; then
-    exec "$@"
+    exec "$NEXT_FILE"
 else
     exit 1
 fi
