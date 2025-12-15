@@ -46,11 +46,6 @@ chmod 660 /opt/mfaportal/mfa.db || true
 chown root:dovecot /opt/mfaportal || true
 chmod 775 /opt/mfaportal || true
 
-# sqlite writes require directory writable for journal/temp files
-chown root:dovecot /opt/mfaportal/mfa.db || true
-chmod 660 /opt/mfaportal/mfa.db || true
-chown root:dovecot /opt/mfaportal || true
-chmod 775 /opt/mfaportal || true
 
 # Cleanup elk uur: verwijder expired, of used waar grace voorbij is
 (

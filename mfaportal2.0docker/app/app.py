@@ -3,7 +3,6 @@ import sqlite3
 import secrets
 import base64
 import hashlib
-import hmac
 import datetime
 from io import BytesIO
 
@@ -14,61 +13,55 @@ from flask import (
     redirect,
     url_for,
     session,
-    flash,           
+    flash,
 )
 import pam
 import pyotp
 import qrcode
 
+# -------------------------------------------------
+# Flask application setup
+# -------------------------------------------------
+
 app = Flask(__name__)
-app.secret_key = "change_me_in_real_setup"  # in productie: environment variable
 
+# Flask session secret
+# In production this MUST be provided via environment variable
+app.secret_key = os.environ.get("FLASK_SECRET_KEY", "change_me_in_real_setup")
+
+# Path to the SQLite database
 DB_PATH = os.path.join(os.path.dirname(__file__), "mfa.db")
-APP_PASSWD_FILE = "/etc/dovecot/app-passwd"
 
 
-# =========================
-#   DATABASE HELPERS
-# =========================
+# =================================================
+# DATABASE HELPERS
+# =================================================
 
 def get_db():
+    """
+    Open a new SQLite connection.
+    A new connection per request avoids cross-thread issues.
+    """
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     return conn
 
 
-def init_db():
-    """Initialiseer de users-tabel met mfa_initialized-veld."""
-    conn = get_db()
-    c = conn.cursor()
-    c.execute("""
-        CREATE TABLE IF NOT EXISTS users (
-            username TEXT PRIMARY KEY,
-            mfa_secret TEXT,
-            app_password TEXT,
-            mfa_initialized INTEGER DEFAULT 0
-        )
-    """)
-    c.execute("""
-    CREATE TABLE IF NOT EXISTS app_passwords (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        username TEXT NOT NULL,
-        password_hash TEXT NOT NULL,
-        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-        expires_at TEXT NOT NULL,
-        used_at TEXT
-    )
-    """)
-    c.execute("CREATE INDEX IF NOT EXISTS idx_app_pw_user ON app_passwords(username)")
-    conn.commit()
-    conn.close()
-
 def migrate_db():
-    """Zorg dat alle tabellen/kolommen bestaan (safe om meerdere keren te draaien)."""
+    """
+    Idempotent database migration.
+
+    This function can be executed on every startup:
+    - Creates tables if they do not exist
+    - Adds missing columns for older database versions
+    - Safe to run multiple times
+    """
     conn = get_db()
     c = conn.cursor()
 
-    # users (bestaat al in init_db, maar veilig)
+    # -------------------------------------------------
+    # users table
+    # -------------------------------------------------
     c.execute("""
         CREATE TABLE IF NOT EXISTS users (
             username TEXT PRIMARY KEY,
@@ -78,13 +71,15 @@ def migrate_db():
         )
     """)
 
-    # kolom mfa_initialized voor oude DB's
+    # Add mfa_initialized column if missing (older DBs)
     try:
         c.execute("ALTER TABLE users ADD COLUMN mfa_initialized INTEGER DEFAULT 0")
     except sqlite3.OperationalError:
         pass
 
-    # NIEUW: app_passwords tabel + index
+    # -------------------------------------------------
+    # app_passwords table
+    # -------------------------------------------------
     c.execute("""
         CREATE TABLE IF NOT EXISTS app_passwords (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -96,11 +91,18 @@ def migrate_db():
             grace_until TEXT
         )
     """)
+
+    # Index for faster lookups by username
     c.execute("CREATE INDEX IF NOT EXISTS idx_app_pw_user ON app_passwords(username)")
+
+    # Backwards compatibility: add missing columns if needed
+    try:
+        c.execute("ALTER TABLE app_passwords ADD COLUMN used_at TEXT")
+    except sqlite3.OperationalError:
+        pass
 
     try:
         c.execute("ALTER TABLE app_passwords ADD COLUMN grace_until TEXT")
-        conn.commit()
     except sqlite3.OperationalError:
         pass
 
@@ -109,6 +111,10 @@ def migrate_db():
 
 
 def get_user(username):
+    """
+    Retrieve a user record from the users table.
+    Returns None if the user does not exist.
+    """
     conn = get_db()
     c = conn.cursor()
     c.execute("SELECT * FROM users WHERE username = ?", (username,))
@@ -117,22 +123,52 @@ def get_user(username):
     return row
 
 
+# =================================================
+# PASSWORD / MFA HELPERS
+# =================================================
+
+def hash_password(pw: str, iterations: int = 200_000) -> str:
+    """
+    Hash an app-password using PBKDF2-HMAC-SHA256.
+
+    Stored format:
+        pbkdf2_sha256$<iterations>$<salt_b64>$<hash_b64>
+
+    App-passwords are NEVER stored in plaintext.
+    """
+    salt = os.urandom(16)
+    dk = hashlib.pbkdf2_hmac("sha256", pw.encode(), salt, iterations)
+    return "pbkdf2_sha256$%d$%s$%s" % (
+        iterations,
+        base64.b64encode(salt).decode(),
+        base64.b64encode(dk).decode(),
+    )
+
+
 def set_app_password(username, app_password):
-    """Sla app password op in SQLite (hashed + expires)."""
+    """
+    Store a newly generated app-password.
+
+    - Password is stored only as a hash
+    - Expiration is fixed at 24 hours
+    - used_at and grace_until are set later by dovecot_checkpw
+    """
     pw_hash = hash_password(app_password)
-    expires_at = (datetime.datetime.utcnow() + datetime.timedelta(days=1)).strftime("%Y-%m-%d %H:%M:%S")
+    expires_at = (
+        datetime.datetime.utcnow() + datetime.timedelta(days=1)
+    ).strftime("%Y-%m-%d %H:%M:%S")
 
     conn = get_db()
     c = conn.cursor()
 
-    # Zorg dat user-record bestaat + markeer MFA init
+    # Ensure user exists and mark MFA as initialized
     c.execute("""
         INSERT INTO users (username, mfa_secret, app_password, mfa_initialized)
         VALUES (?, '', '', 1)
         ON CONFLICT(username) DO UPDATE SET mfa_initialized=1
     """, (username,))
 
-    # Nieuw one-time password record
+    # Insert new app-password record
     c.execute("""
         INSERT INTO app_passwords (username, password_hash, expires_at)
         VALUES (?, ?, ?)
@@ -143,10 +179,15 @@ def set_app_password(username, app_password):
 
 
 def get_or_create_secret(username):
+    """
+    Retrieve an existing TOTP secret for a user,
+    or generate and store a new one if none exists.
+    """
     conn = get_db()
     c = conn.cursor()
     c.execute("SELECT mfa_secret FROM users WHERE username = ?", (username,))
     row = c.fetchone()
+
     if row and row["mfa_secret"]:
         secret = row["mfa_secret"]
     else:
@@ -157,11 +198,15 @@ def get_or_create_secret(username):
             ON CONFLICT(username) DO UPDATE SET mfa_secret=excluded.mfa_secret
         """, (username, secret))
         conn.commit()
+
     conn.close()
     return secret
 
 
 def get_secret(username):
+    """
+    Return the TOTP secret for a user, or None if not set.
+    """
     conn = get_db()
     c = conn.cursor()
     c.execute("SELECT mfa_secret FROM users WHERE username = ?", (username,))
@@ -171,30 +216,24 @@ def get_secret(username):
 
 
 def mark_mfa_initialized(username):
+    """
+    Mark MFA as initialized for a user.
+    """
     conn = get_db()
     c = conn.cursor()
     c.execute("UPDATE users SET mfa_initialized = 1 WHERE username = ?", (username,))
     conn.commit()
     conn.close()
 
-def hash_password(pw: str, iterations: int = 200_000) -> str:
-    salt = os.urandom(16)
-    dk = hashlib.pbkdf2_hmac("sha256", pw.encode(), salt, iterations)
-    return "pbkdf2_sha256$%d$%s$%s" % (
-        iterations,
-        base64.b64encode(salt).decode(),
-        base64.b64encode(dk).decode(),
-    )
 
-
-# =========================
-#   QR-CODE HELPER
-# =========================
+# =================================================
+# QR CODE GENERATION
+# =================================================
 
 def generate_qr_code(secret, username):
     """
-    Maak een otpauth:// URL en zet die om naar een base64 PNG QR-code,
-    geschikt voor Microsoft Authenticator / Google Authenticator.
+    Generate a base64-encoded PNG QR code for TOTP enrollment.
+    Compatible with Microsoft Authenticator and Google Authenticator.
     """
     issuer = "MFA-Portal"
     otp_uri = (
@@ -205,23 +244,28 @@ def generate_qr_code(secret, username):
     qr = qrcode.make(otp_uri)
     buffer = BytesIO()
     qr.save(buffer, format="PNG")
-    qr_base64 = base64.b64encode(buffer.getvalue()).decode()
-    return qr_base64
+    return base64.b64encode(buffer.getvalue()).decode()
 
 
-# =========================
-#   ROUTES
-# =========================
+# =================================================
+# ROUTES
+# =================================================
 
 @app.route("/", methods=["GET", "POST"])
 def login():
+    """
+    Primary login endpoint.
+
+    Flow:
+    1. Authenticate user via PAM (system credentials)
+    2. If MFA already initialized → redirect to MFA challenge
+    3. Otherwise → show MFA enrollment QR code
+    """
     if request.method == "POST":
-        # Nooit None naar PAM sturen
         username = (request.form.get("username") or "").strip()
         password = request.form.get("password") or ""
 
         if not username or not password:
-            # <<< NU via flash, zodat het via base.html nice wordt getoond
             flash("Vul zowel gebruikersnaam als wachtwoord in.", "error")
             return redirect(url_for("login"))
 
@@ -231,82 +275,67 @@ def login():
 
             user = get_user(username)
             if user and user["mfa_initialized"] == 1 and user["mfa_secret"]:
-                # MFA al geinitialiseerd → direct naar challenge (alleen TOTP invoer)
                 return redirect(url_for("mfa_challenge"))
-            else:
-                # MFA nog NIET geinitialiseerd → QR + secret tonen
-                secret = get_or_create_secret(username)
-                qr = generate_qr_code(secret, username)
-                return render_template(
-                    "mfa.html",
-                    mode="init",   # QR-modus
-                    secret=secret,
-                    qr=qr,
-                    username=username,  # <<< handig voor in de UI
-                )
-        else:
-            # <<< Professionelere foutmelding via flash
-            flash("Ongeldige gebruikersnaam of wachtwoord.", "error")
-            return redirect(url_for("login"))
 
-    # GET
+            secret = get_or_create_secret(username)
+            qr = generate_qr_code(secret, username)
+            return render_template(
+                "mfa.html",
+                mode="init",
+                secret=secret,
+                qr=qr,
+                username=username,
+            )
+
+        flash("Ongeldige gebruikersnaam of wachtwoord.", "error")
+        return redirect(url_for("login"))
+
     return render_template("login.html")
 
 
 @app.route("/mfa", methods=["GET", "POST"])
 def mfa_challenge():
+    """
+    MFA challenge endpoint.
+
+    - Verifies TOTP code
+    - On success: generates a one-time app-password
+    """
     username = session.get("username")
     if not username:
-        flash("Je sessie is verlopen. Log opnieuw in.", "error")  # <<<
+        flash("Je sessie is verlopen. Log opnieuw in.", "error")
         return redirect(url_for("login"))
 
     user = get_user(username)
-    secret = get_secret(username)
-    if not secret:
-        secret = get_or_create_secret(username)
+    secret = get_secret(username) or get_or_create_secret(username)
 
     if request.method == "POST":
         code = request.form.get("code") or ""
         totp = pyotp.TOTP(secret)
+
         if totp.verify(code):
-            # MFA OK → app-password genereren
             app_password = secrets.token_urlsafe(16)
             set_app_password(username, app_password)
 
-            # Markeer MFA als geinitialiseerd (voor het geval dat nog niet zo was)
             if not user or user["mfa_initialized"] != 1:
                 mark_mfa_initialized(username)
 
-            # <<< Je kunt hier ook flashen dat het gelukt is, maar result.html is duidelijk genoeg
             return render_template(
                 "result.html",
                 app_password=app_password,
-                username=username,  # <<< zodat je in de UI kunt tonen voor wie
+                username=username,
             )
-        else:
-            # Foute code → flash + redirect terug naar de challenge
-            flash("Ongeldige of verlopen code. Probeer het opnieuw.", "error")  # <<<
-            return redirect(url_for("mfa_challenge"))
 
-    # GET → alleen challenge scherm tonen (alleen TOTP invoer)
+        flash("Ongeldige of verlopen code. Probeer het opnieuw.", "error")
+        return redirect(url_for("mfa_challenge"))
+
     return render_template("mfa.html", mode="challenge", username=username)
 
 
-if __name__ == "__main__":
-    if not os.path.exists(DB_PATH):
-        init_db()
-        migrate_db()
-    else:
-        # Voor het geval de tabel bestond zonder mfa_initialized,
-        # proberen we een ALTER TABLE (stil falen als de kolom al bestaat).
-        conn = get_db()
-        c = conn.cursor()
-        try:
-            c.execute("ALTER TABLE users ADD COLUMN mfa_initialized INTEGER DEFAULT 0")
-            conn.commit()
-        except sqlite3.OperationalError:
-            # Kolom bestaat waarschijnlijk al
-            pass
-        conn.close()
+# =================================================
+# APPLICATION ENTRYPOINT
+# =================================================
 
+if __name__ == "__main__":
+    migrate_db()
     app.run(host="0.0.0.0", port=5000, debug=True)
