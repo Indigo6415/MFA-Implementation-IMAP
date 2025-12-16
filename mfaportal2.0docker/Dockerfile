@@ -37,6 +37,8 @@ RUN sed -i 's/\r$//' /usr/local/bin/dovecot_checkpw.py \
  && chmod 755 /usr/local/bin/dovecot_checkpw.py
 
 # Dovecot config uit project kopiëren
+COPY config/dovecot/10-logging.conf /etc/dovecot/conf.d/10-logging.conf
+RUN sed -i 's/\r$//' /etc/dovecot/conf.d/10-logging.conf
 COPY config/dovecot/10-auth.conf /etc/dovecot/conf.d/10-auth.conf
 RUN sed -i 's/\r$//' /etc/dovecot/conf.d/10-auth.conf
 COPY config/dovecot/10-mail.conf /etc/dovecot/conf.d/10-mail.conf
