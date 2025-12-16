@@ -9,7 +9,8 @@ import base64
 import pwd
 
 DB = "/opt/mfaportal/mfa.db"
-GRACE_SECONDS = int(os.environ.get("GRACE_SECONDS", "60"))  # zet op 0 voor strict one-time
+GRACE_SECONDS = int(os.environ.get("GRACE_SECONDS", "60")
+                    )  # zet op 0 voor strict one-time
 DEBUG = os.environ.get("DEBUG_CHECKPW", "0") == "1"
 
 
@@ -54,6 +55,7 @@ def clean(s: str) -> str:
 
 
 def set_env_for_reply(user: str) -> None:
+    # Set USER and HOME for the reply process
     u = clean(user)
     os.environ["USER"] = u
     try:
@@ -68,27 +70,33 @@ def now_utc_str() -> str:
 
 
 def main() -> None:
+    # Check arguements supplied
     if len(sys.argv) < 2:
         tempfail()
     reply_path = sys.argv[1]
 
+    # Check for return path
     if not os.path.exists(reply_path):
         tempfail()
 
+    # Read user/pass from fd 3
     try:
         user, pw = read_fd3_userpass()
     except Exception as e:
         log(f"fd3 read error: {e!r}")
         tempfail()
 
+    # Validate input
     user = user.strip()
     if not user or not pw:
         log("no input (empty user or pw)")
         sys.exit(1)
 
+    # Log attempt
     now = now_utc_str()
     log(f"user={user} pw_len={len(pw)} now={now} grace={GRACE_SECONDS}")
 
+    # Open DB and check password
     try:
         conn = sqlite3.connect(DB, timeout=5)
         conn.row_factory = sqlite3.Row
@@ -110,7 +118,9 @@ def main() -> None:
         rows = cur.fetchall()
         log(f"candidates={len(rows)}")
 
+        # Check each row
         for r in rows:
+            # Check password (verify)
             if not verify_hash(pw, r["password_hash"]):
                 continue
 
@@ -118,9 +128,10 @@ def main() -> None:
             used_at = r["used_at"]
             grace_until = r["grace_until"]
 
-            # Eerste succesvolle login: markeer used_at en grace_until (als grace > 0)
             if used_at is None:
+                # Pass not used net
                 if GRACE_SECONDS > 0:
+                    # Set used_at and grace_until
                     cur.execute(
                         """
                         UPDATE app_passwords
@@ -130,6 +141,7 @@ def main() -> None:
                         """,
                         (f"+{GRACE_SECONDS} seconds", r["id"]),
                     )
+                # Password has been used
                 else:
                     cur.execute(
                         """
@@ -141,20 +153,26 @@ def main() -> None:
                     )
 
                 conn.commit()
+                # Check that exactly one row was updated
                 if cur.rowcount != 1:
-                    sys.exit(1)  # race
+                    sys.exit(1)
 
+                # Set user and home for reply process
                 set_env_for_reply(user)
+                # Execute reply
                 os.execv(reply_path, [reply_path])
 
-            # Al gebruikt: alleen toestaan binnen grace
+            # If the grace period is active
             if GRACE_SECONDS > 0 and grace_until is not None:
+                # Is grace_until later than the current time?
                 cur.execute(
                     "SELECT (grace_until > ?) AS ok FROM app_passwords WHERE id = ?",
                     (now, r["id"]),
                 )
+                # Fetch result
                 ok = cur.fetchone()[0]
                 if ok:
+                    # Set user and home for reply process
                     set_env_for_reply(user)
                     os.execv(reply_path, [reply_path])
 

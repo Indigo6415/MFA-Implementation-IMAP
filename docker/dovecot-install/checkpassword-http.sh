@@ -1,5 +1,6 @@
 #!/bin/bash
 set -e
+echo "Dovecot checkpassword-http.sh called with args: $@"
 
 REMOTE_IP="$1"
 NEXT_FILE="$2"
@@ -14,7 +15,8 @@ HTTP_CODE=$(curl --silent --show-error --max-time 5 -o /dev/null \
   || true)
 
 if [ "$HTTP_CODE" = "200" ]; then
-    exec "$NEXT_FILE"
+    echo next file: $NEXT_FILE
+    exec $NEXT_FILE
 else
     exit 1
 fi
