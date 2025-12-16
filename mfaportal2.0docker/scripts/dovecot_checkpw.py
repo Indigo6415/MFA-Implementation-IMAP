@@ -139,20 +139,24 @@ def main() -> None:
     if not os.path.exists(reply_path):
         tempfail()
 
+    # Read user/pass from fd 3
     try:
         user, pw = read_fd3_userpass()
     except Exception as e:
         log(f"fd3 read error: {e!r}")
         tempfail()
 
+    # Validate input
     user = user.strip()
     if not user or not pw:
         log("no input (empty user or password)")
         sys.exit(1)
 
+    # Log attempt
     now = now_utc_str()
     log(f"user={user} pw_len={len(pw)} now={now} grace={GRACE_SECONDS}")
 
+    # Open DB and check password
     try:
         # Open database with timeout to avoid lock issues
         conn = sqlite3.connect(DB, timeout=5)
@@ -175,6 +179,7 @@ def main() -> None:
         rows = cur.fetchall()
         log(f"candidates={len(rows)}")
 
+        # Check each row
         for r in rows:
             # Password mismatch → try next candidate
             if not verify_hash(pw, r["password_hash"]):
@@ -185,7 +190,9 @@ def main() -> None:
 
             # First successful use of this password
             if used_at is None:
+                # Pass not used net
                 if GRACE_SECONDS > 0:
+                    # Set used_at and grace_until
                     cur.execute(
                         """
                         UPDATE app_passwords
@@ -195,6 +202,7 @@ def main() -> None:
                         """,
                         (f"+{GRACE_SECONDS} seconds", r["id"]),
                     )
+                # Password has been used
                 else:
                     cur.execute(
                         """
@@ -211,17 +219,22 @@ def main() -> None:
                 if cur.rowcount != 1:
                     sys.exit(1)
 
+                # Set user and home for reply process
                 set_env_for_reply(user)
+                # Execute reply
                 os.execv(reply_path, [reply_path])
 
             # Password already used: allow reuse only during grace window
             if GRACE_SECONDS > 0 and grace_until is not None:
+                # Is grace_until later than the current time?
                 cur.execute(
                     "SELECT (grace_until > ?) AS ok FROM app_passwords WHERE id = ?",
                     (now, r["id"]),
                 )
+                # Fetch result
                 ok = cur.fetchone()[0]
                 if ok:
+                    # Set user and home for reply process
                     set_env_for_reply(user)
                     os.execv(reply_path, [reply_path])
 
