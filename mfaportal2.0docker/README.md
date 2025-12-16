@@ -3,10 +3,10 @@
 ## 1.Building the container
 
 Either build the container through the 'docker-compose.yml' or build it using:
-'''
+
 docker-compose build --no-cache
 docker-compose up -d
-'''
+
 
 ## 2.Setup user
 
@@ -24,13 +24,11 @@ in the docker container: 'adduser [name]', and create a password.
 
 You want to manually fill in the fields:
 incoming server:
-'''
 Servername: 'localhost'
 port: '143', security: 'none'
 authentication method: 'password', user: '[name]' (from Step 2!)
-'''
+
 Outgoing server:
-'''
 Servername: 'localhost'
 port:'25', security: 'none'
 authentication method: 'password', user: '[name]' (from Step 2!)
