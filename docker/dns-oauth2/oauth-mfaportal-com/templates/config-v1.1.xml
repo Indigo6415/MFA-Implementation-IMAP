@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<clientConfig version="1.1">
+  <emailProvider id="{{ domain or 'localhost' }}">
+
+    <domain>{{ domain or 'localhost' }}</domain>
+    <displayName>{{ email or 'user@example.com' }}</displayName>
+    <displayShortName>{{ domain or 'local' }}</displayShortName>
+
+    <incomingServer type="imap">
+      <hostname>localhost</hostname>
+      <port>143</port>
+      <socketType>plain</socketType>
+      <authentication>OAuth2</authentication>
+      <username>{{ email or '%EMAILADDRESS%' }}</username>
+    </incomingServer>
+
+    <outgoingServer type="smtp">
+      <hostname>localhost</hostname>
+      <port>25</port>
+      <socketType>plain</socketType>
+      <authentication>OAuth2</authentication>
+      <username>{{ email or '%EMAILADDRESS%' }}</username>
+    </outgoingServer>
+
+    <oauth2>
+      <issuer>https://test.test</issuer>
+      <authorizationEndpoint>https://test.test/oauth2/authorize</authorizationEndpoint>
+      <tokenEndpoint>https://test.test/oauth2/token</tokenEndpoint>
+      <scope>openid email profile</scope>
+    </oauth2>
+
+  </emailProvider>
+</clientConfig>

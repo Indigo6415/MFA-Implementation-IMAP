@@ -15,26 +15,26 @@ RUN apt-get update && apt-get install -y \
 
 # adduser configureren: HOME=/home en extra groep 'mail'
 RUN sed -i 's|^HOME=.*|HOME=/home|' /etc/adduser.conf \
- && sed -i 's/^#\?ADD_EXTRA_GROUPS.*/ADD_EXTRA_GROUPS=1/' /etc/adduser.conf \
- && sed -i 's/^#\?EXTRA_GROUPS=.*/EXTRA_GROUPS="mail"/' /etc/adduser.conf
+    && sed -i 's/^#\?ADD_EXTRA_GROUPS.*/ADD_EXTRA_GROUPS=1/' /etc/adduser.conf \
+    && sed -i 's/^#\?EXTRA_GROUPS=.*/EXTRA_GROUPS="mail"/' /etc/adduser.conf
 
 # Exim4 basisconfig kopiëren (CRLF → LF fixen) en config genereren
 COPY config/exim/update-exim4.conf.conf /etc/exim4/update-exim4.conf.conf
 RUN sed -i 's/\r$//' /etc/exim4/update-exim4.conf.conf \
- && update-exim4.conf \
- && mkdir -p /var/log/exim4 \
- && chown -R Debian-exim:Debian-exim /var/log/exim4 \
- && chmod -R 750 /var/log/exim4 \
- && touch /var/log/exim4/mainlog \
- && chown Debian-exim:Debian-exim /var/log/exim4/mainlog
+    && update-exim4.conf \
+    && mkdir -p /var/log/exim4 \
+    && chown -R Debian-exim:Debian-exim /var/log/exim4 \
+    && chmod -R 750 /var/log/exim4 \
+    && touch /var/log/exim4/mainlog \
+    && chown Debian-exim:Debian-exim /var/log/exim4/mainlog
 
 # /var/mail rechten goed voor mbox + groep mail
 RUN chown root:mail /var/mail && chmod 2775 /var/mail
 
 COPY scripts/dovecot_checkpw.py /usr/local/bin/dovecot_checkpw.py
 RUN sed -i 's/\r$//' /usr/local/bin/dovecot_checkpw.py \
- && chown root:root /usr/local/bin/dovecot_checkpw.py \
- && chmod 755 /usr/local/bin/dovecot_checkpw.py
+    && chown root:root /usr/local/bin/dovecot_checkpw.py \
+    && chmod 755 /usr/local/bin/dovecot_checkpw.py
 
 # Dovecot config uit project kopiëren
 COPY config/dovecot/10-logging.conf /etc/dovecot/conf.d/10-logging.conf

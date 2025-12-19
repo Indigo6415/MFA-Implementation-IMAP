@@ -1,0 +1,23 @@
+## OAuth2 configuration (Dovecot 2.4.x style)
+## Reference: https://doc.dovecot.org/2.4.2/core/config/auth/databases/oauth2.html
+
+oauth2 {
+	# Token validation
+	introspection_mode = post
+	introspection_url = https://host.docker.internal/token
+	# Optional tokeninfo endpoint; leave empty if not used
+	#tokeninfo_url =
+
+	# Client credentials for the introspection call
+	client_id = test_client_id
+	client_secret = test_secret
+
+	# Map username from token
+	username_attribute = email
+
+	# Accept only specific issuer(s) if desired
+	#issuers = https://host.docker.internal
+
+	# Allow slight clock skew for exp/nbf
+	#token_expire_grace = 1min
+}

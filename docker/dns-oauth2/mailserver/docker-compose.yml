@@ -1,0 +1,15 @@
+version: "3.9"
+
+services:
+  dovecot:
+    build: .
+    container_name: dovecot-oauth2
+    ports:
+      - "143:143"
+      - "993:993"
+    volumes:
+      - maildata:/var/mail
+    restart: unless-stopped
+
+volumes:
+  maildata:

@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Login</title>
+</head>
+
+<body>
+    <main>
+        <h1>Login</h1>
+        <p>Email: {{ email or 'Not provided' }}</p>
+        <form action="/form" method="post">
+            <label for="password">Password:</label>
+            <input type="hidden" id="email" name="email" value="{{ email }}">
+            <input type="password" id="password" name="password" required>
+            <button type="submit">Login</button>
+    </main>
+</body>
+
+</html>
