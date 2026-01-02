@@ -5,8 +5,13 @@ ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y --no-install-recommends \
     dovecot-core \
     dovecot-imapd \
+    dovecot-pop3d \
+    dovecot-lmtpd \
+    dovecot-sieve \
+    dovecot-managesieved \
     ca-certificates \
     curl \
+    ssl-cert \
     && rm -rf /var/lib/apt/lists/*
 
 # vmail user
