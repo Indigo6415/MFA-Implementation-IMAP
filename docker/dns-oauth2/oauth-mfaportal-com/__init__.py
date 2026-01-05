@@ -76,6 +76,39 @@ def token_endpoint():
         }, 400
 
 
+# TODO: Create a /token/verify path to verify the access token and NOT the authorization code.
+@app.route("/token/verify", methods=["POST"])
+def token_verify_endpoint():
+    print("Received /token/verify request")
+    # Log all incoming arguments for debugging
+    form_payload = request.form.to_dict(flat=False)
+    query_params = request.args.to_dict(flat=False)
+    json_payload = request.get_json(silent=True)
+
+    print("/token/verify request form:", form_payload)
+    print("/token/verify request args:", query_params)
+    print("/token/verify request json:", json_payload)
+
+    access_token = request.form.get("token")
+
+    # For demonstration purposes, we will accept any access token that was generated
+    if access_token:
+        print("Valid access token received:", access_token)
+        return {
+            "active": True,
+            "email": "obama3@test.test",
+            "scope": "test_mail test_addressbook test_calendar",
+            "exp": 3600,
+            "token_type": "Bearer"
+        }, 200
+    else:
+        return {
+            "active": False,
+            "error": "invalid_token",
+            "error_description": "The provided access token is invalid or has expired."
+        }, 400
+
+
 @app.route("/.well-known/autoconfig/mail/config-v1.1.xml", methods=["GET"])
 def well_known():
     # Extract the email and domain from query parameters if available
@@ -94,11 +127,15 @@ def well_known():
 if __name__ == "__main__":
     cert_file = os.getenv("SSL_CERT_FILE", "cert.pem")
     key_file = os.getenv("SSL_KEY_FILE", "key.pem")
-    port = int(os.getenv("PORT", "443"))
+    # NOTE
+    # Dovecot only accepts verified ssl certificates.
+    # Thunberbird only accepts encrypted https.
+    # NOTE
+    port = int(os.getenv("PORT", "80"))
 
     app.run(
         debug=True,
         host="127.0.0.1",
         port=port,
-        ssl_context=(cert_file, key_file),
+        # ssl_context=(cert_file, key_file),
     )
