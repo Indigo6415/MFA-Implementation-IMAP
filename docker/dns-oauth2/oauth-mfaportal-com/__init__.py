@@ -96,7 +96,7 @@ def token_verify_endpoint():
         print("Valid access token received:", access_token)
         return {
             "active": True,
-            "email": "obama3@test.test",
+            "email": "obama@test.test",
             "scope": "test_mail test_addressbook test_calendar",
             "exp": 3600,
             "token_type": "Bearer"
@@ -128,14 +128,14 @@ if __name__ == "__main__":
     cert_file = os.getenv("SSL_CERT_FILE", "cert.pem")
     key_file = os.getenv("SSL_KEY_FILE", "key.pem")
     # NOTE
-    # Dovecot only accepts verified ssl certificates.
-    # Thunberbird only accepts encrypted https.
+    # Dovecot only accepts verified ssl certificates. Port 80, no ssl.
+    # Thunberbird only accepts encrypted https. Port 443, ssl (may be self-signed).
     # NOTE
-    port = int(os.getenv("PORT", "80"))
+    port = int(os.getenv("PORT", "443"))
 
     app.run(
         debug=True,
         host="127.0.0.1",
         port=port,
-        # ssl_context=(cert_file, key_file),
+        ssl_context=(cert_file, key_file),
     )
