@@ -18,6 +18,8 @@ def service_not_available():
 AUTH_CODES = {}
 # Store the mfa_secret + mfa_digits + mfa_interval for users with MFA enabled
 MFA_USERS = {}
+# Store the Access Token, Refresh Token, Expiry, Scope for issued tokens along with associated email
+ISSUED_TOKENS = {}
 
 
 @app.route("/form", methods=["GET", "POST"])
@@ -67,9 +69,22 @@ def token_endpoint():
 
     if code in AUTH_CODES:
         print("Valid auth code received for email:", AUTH_CODES[code]["email"])
+
+        access_token = secrets.token_urlsafe(32)
+        refresh_token = secrets.token_urlsafe(32)
+
+        # Store issued tokens
+        ISSUED_TOKENS[access_token] = {
+            "email": AUTH_CODES[code]["email"],
+            "refresh_token": refresh_token,
+            "token_type": "Bearer",
+            "expires_in": 3600,  # seconds (1 hour)
+            "scope": "test_mail test_addressbook test_calendar"
+        }
+
         return {
-            "access_token": secrets.token_urlsafe(32),
-            "refresh_token": secrets.token_urlsafe(32),
+            "access_token": access_token,
+            "refresh_token": refresh_token,
             "token_type": "Bearer",
             "expires_in": 3600,
             "scope": "test_mail test_addressbook test_calendar"
@@ -95,15 +110,16 @@ def token_verify_endpoint():
 
     access_token = request.form.get("token")
 
-    # For demonstration purposes, we will accept any access token that was generated
-    if access_token:
-        print("Valid access token received:", access_token)
+    if access_token in ISSUED_TOKENS:
+        print("Valid access token received for email:",
+              ISSUED_TOKENS[access_token]["email"])
+
         return {
             "active": True,
-            "email": "obama@test.test",
-            "scope": "test_mail test_addressbook test_calendar",
-            "exp": 3600,
-            "token_type": "Bearer"
+            "email": ISSUED_TOKENS[access_token]["email"],
+            "scope": ISSUED_TOKENS[access_token]["scope"],
+            "exp": ISSUED_TOKENS[access_token]["expires_in"],
+            "token_type": ISSUED_TOKENS[access_token]["token_type"],
         }, 200
     else:
         return {
