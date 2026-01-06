@@ -1,0 +1,7 @@
+{
+    "obama@test.test": {
+        "mfa_secret": "ajsdfdslkfsdjkfdsklfsd",
+        "mfa_digits": 6,
+        "mfa_period": 30
+    }
+}

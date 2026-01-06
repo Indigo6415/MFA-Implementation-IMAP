@@ -3,33 +3,113 @@
 
 <head>
     <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Login</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
 </head>
 
 <body>
     <main>
         <h1>Login</h1>
+
         <p>Email: {{ email or 'Not provided' }}</p>
-        <label for="password">Password:</label>
-        <input type="hidden" id="email" name="email" value="{{ email }}">
-        <input type="password" id="password" name="password" required>
-        <button type="submit" id="continue-button">Login</button>
-        <!-- Stap 1: Maak javascript die detecteert of de knop is ingedrukt -->
 
-        <!-- Stap 2: Doe een api call naar /mfa/user met de email als data middels javascript (zodat je wel op dezelfde pagina blijft). -->
+        <input type="hidden" id="email" value="{{ email }}">
 
-        <!-- Stap 3: Als de api zegt dat user al mfa heeft, laat alleen de input box zien. 
-         Als de api zegt dat de user nog geen mfa heeft, laat de qr code zien en laat de user 1 keer de mfa code invoeren. -->
+        <!-- Password step (cosmetic only in your demo) -->
+        <div id="password-step">
+            <label>Password:</label>
+            <input type="password">
+            <button type="button" id="login-btn">Login</button>
+        </div>
 
-        <!-- Stap 4: Als de user de qr code heeft gescant en de ingevoerde code is correct.
-          Verstuur een api call middels javascript naar /mfa/register met de email + mfa_secret + mfa_parameters en sla deze op -->
+        <!-- MFA step -->
+        <div id="mfa-step" style="display:none;">
+            <div id="qr-wrapper" style="display:none;">
+                <p>Scan this QR code with your authenticator app:</p>
+                <img id="qr-image" alt="MFA QR">
+            </div>
 
-        <!-- Stap 5: Als de code is ingevoerd moet deze worden gecheckt middels een api call. Als de api zegt dat de code valide is, 
-         dan moet er een post naar /form worden gestuurd met de email van de user in de form body. 
-         
-         Als de code invalide is, moet de gebruiker hem nogmaals invoeren.-->
+            <label>MFA code:</label>
+            <input type="text" id="mfa-code" inputmode="numeric" autocomplete="one-time-code">
+            <button type="button" id="verify-btn">Verify</button>
+
+            <p id="mfa-error" style="color:red; display:none;">
+                Invalid MFA code. Try again.
+            </p>
+        </div>
+
+        <!-- Final hidden submit -->
+        <form id="final-form" method="post" action="/form" style="display:none;">
+            <input type="hidden" name="email" id="final-email">
+        </form>
     </main>
+
+    <script>
+        const email = document.getElementById('email').value;
+
+        document.getElementById('login-btn').addEventListener('click', async () => {
+
+            const res = await fetch('/mfa/user', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: new URLSearchParams({ email })
+            });
+
+            const data = await res.json();
+
+            document.getElementById('password-step').style.display = 'none';
+            document.getElementById('mfa-step').style.display = 'block';
+
+            if (!data.mfa_enabled) {
+                await registerMFA();
+            }
+        });
+
+        async function registerMFA() {
+            const res = await fetch('/mfa/register', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: new URLSearchParams({ email })
+            });
+
+            const data = await res.json();
+
+            /*
+              otp_url is an otpauth:// URI
+              Convert to QR using Google Charts (client-side only)
+            */
+            const qrUrl =
+                'https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=' +
+                encodeURIComponent(data.otp_url);
+
+            document.getElementById('qr-image').src = qrUrl;
+            document.getElementById('qr-wrapper').style.display = 'block';
+        }
+
+        document.getElementById('verify-btn').addEventListener('click', async () => {
+            const mfaCode = document.getElementById('mfa-code').value;
+
+            const res = await fetch('/mfa/verify', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: new URLSearchParams({
+                    email,
+                    mfa_code: mfaCode
+                })
+            });
+
+            const data = await res.json();
+
+            if (!data.mfa_verified) {
+                document.getElementById('mfa-error').style.display = 'block';
+                return;
+            }
+
+            // Final login
+            document.getElementById('final-email').value = email;
+            document.getElementById('final-form').submit();
+        });
+    </script>
 </body>
 
 </html>

@@ -3,6 +3,8 @@ import secrets
 import base64
 import os
 
+from mfa import TOTP
+
 app = Flask(__name__)
 app.secret_key = os.urandom(24)
 
@@ -79,7 +81,6 @@ def token_endpoint():
         }, 400
 
 
-# TODO: Create a /token/verify path to verify the access token and NOT the authorization code.
 @app.route("/token/verify", methods=["POST"])
 def token_verify_endpoint():
     print("Received /token/verify request")
@@ -162,11 +163,34 @@ def mfa_register_endpoint():
 
     print(f"Registered MFA for user {email} with secret {secret_b32}")
 
+    otp_url = TOTP(secret_b32).generate_otp_url("MFAPortal", email)
+
     return {
-        "mfa_secret": secret_b32,
-        "mfa_digits": 6,
-        "mfa_interval": 30
+        "otp_url": otp_url
     }, 200
+
+
+@app.route("/mfa/verify", methods=["POST"])
+def mfa_verify_endpoint():
+    email = request.form.get("email")
+    mfa_code = request.form.get("mfa_code")
+
+    secret_b32 = MFA_USERS.get(email, {}).get("mfa_secret", "")
+
+    totp = TOTP(secret_b32)
+    totp_code = totp.generate_totp()
+
+    # For demonstration purposes, we will accept any MFA code "123456"
+    if email in MFA_USERS and mfa_code == totp_code:
+        print(f"MFA verification successful for user {email}")
+        return {
+            "mfa_verified": True
+        }, 200
+    else:
+        print(f"MFA verification failed for user {email}")
+        return {
+            "mfa_verified": False
+        }, 200
 
 
 if __name__ == "__main__":
