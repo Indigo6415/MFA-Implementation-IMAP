@@ -2,24 +2,58 @@ from flask import Flask, render_template, request, redirect
 import secrets
 import base64
 import os
+import sqlite3
+from contextlib import closing
 
 from mfa import TOTP
 
 app = Flask(__name__)
 app.secret_key = os.urandom(24)
 
+DB_PATH = "auth.db"
+# Authorization codes are short-lived; store them in SQLite as well
+
+
+def get_db():
+    return sqlite3.connect(DB_PATH)
+
+
+def init_db():
+    with closing(get_db()) as db:
+        db.execute("""
+            CREATE TABLE IF NOT EXISTS mfa_users (
+                email TEXT PRIMARY KEY,
+                mfa_secret TEXT NOT NULL,
+                mfa_digits INTEGER NOT NULL,
+                mfa_interval INTEGER NOT NULL
+            )
+        """)
+        db.execute("""
+            CREATE TABLE IF NOT EXISTS issued_tokens (
+                access_token TEXT PRIMARY KEY,
+                email TEXT NOT NULL,
+                refresh_token TEXT NOT NULL,
+                token_type TEXT NOT NULL,
+                expires_in INTEGER NOT NULL,
+                scope TEXT NOT NULL
+            )
+        """)
+        db.execute("""
+            CREATE TABLE IF NOT EXISTS auth_codes (
+                code TEXT PRIMARY KEY,
+                email TEXT NOT NULL,
+                created_at INTEGER NOT NULL
+            )
+        """)
+        db.commit()
+
+
+init_db()
+
 
 @app.route("/", methods=["GET"])
 def service_not_available():
     return "Service not available at this path.", 404
-
-
-# temporary in-memory store
-AUTH_CODES = {}
-# Store the mfa_secret + mfa_digits + mfa_interval for users with MFA enabled
-MFA_USERS = {}
-# Store the Access Token, Refresh Token, Expiry, Scope for issued tokens along with associated email
-ISSUED_TOKENS = {}
 
 
 @app.route("/form", methods=["GET", "POST"])
@@ -44,9 +78,12 @@ def form_redirect():
     code = secrets.token_urlsafe(32)
 
     # 2. Store it (very important)
-    AUTH_CODES[code] = {
-        "email": email
-    }
+    with closing(get_db()) as db:
+        db.execute(
+            "INSERT INTO auth_codes (code, email, created_at) VALUES (?, ?, strftime('%s','now'))",
+            (code, email)
+        )
+        db.commit()
 
     # 3. Redirect EXACTLY to https://localhost
     return redirect(f"https://localhost/?code={code}", code=302)
@@ -63,24 +100,44 @@ def token_endpoint():
     print("/token request form:", form_payload)
     print("/token request args:", query_params)
     print("/token request json:", json_payload)
-    print("Current AUTH_CODES store:", AUTH_CODES)
 
     code = request.form.get("code")
 
-    if code in AUTH_CODES:
-        print("Valid auth code received for email:", AUTH_CODES[code]["email"])
+    with closing(get_db()) as db:
+        cur = db.execute(
+            "SELECT email FROM auth_codes WHERE code = ?",
+            (code,)
+        )
+        row = cur.fetchone()
+
+    if row:
+        email = row[0]
+        print("Valid auth code received for email:", email)
 
         access_token = secrets.token_urlsafe(32)
         refresh_token = secrets.token_urlsafe(32)
 
-        # Store issued tokens
-        ISSUED_TOKENS[access_token] = {
-            "email": AUTH_CODES[code]["email"],
-            "refresh_token": refresh_token,
-            "token_type": "Bearer",
-            "expires_in": 3600,  # seconds (1 hour)
-            "scope": "test_mail test_addressbook test_calendar"
-        }
+        with closing(get_db()) as db:
+            db.execute("""
+                INSERT INTO issued_tokens
+                (access_token, email, refresh_token, token_type, expires_in, scope)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """, (
+                access_token,
+                email,
+                refresh_token,
+                "Bearer",
+                3600,
+                "test_mail test_addressbook test_calendar"
+            ))
+            db.commit()
+
+        with closing(get_db()) as db:
+            db.execute(
+                "DELETE FROM auth_codes WHERE code = ?",
+                (code,)
+            )
+            db.commit()
 
         return {
             "access_token": access_token,
@@ -99,27 +156,26 @@ def token_endpoint():
 @app.route("/token/verify", methods=["POST"])
 def token_verify_endpoint():
     print("Received /token/verify request")
-    # Log all incoming arguments for debugging
-    form_payload = request.form.to_dict(flat=False)
-    query_params = request.args.to_dict(flat=False)
-    json_payload = request.get_json(silent=True)
-
-    print("/token/verify request form:", form_payload)
-    print("/token/verify request args:", query_params)
-    print("/token/verify request json:", json_payload)
 
     access_token = request.form.get("token")
 
-    if access_token in ISSUED_TOKENS:
-        print("Valid access token received for email:",
-              ISSUED_TOKENS[access_token]["email"])
+    with closing(get_db()) as db:
+        cur = db.execute("""
+            SELECT email, scope, expires_in, token_type
+            FROM issued_tokens
+            WHERE access_token = ?
+        """, (access_token,))
+        row = cur.fetchone()
 
+    if row:
+        email, scope, expires_in, token_type = row
+        print("Valid access token received for email:", email)
         return {
             "active": True,
-            "email": ISSUED_TOKENS[access_token]["email"],
-            "scope": ISSUED_TOKENS[access_token]["scope"],
-            "exp": ISSUED_TOKENS[access_token]["expires_in"],
-            "token_type": ISSUED_TOKENS[access_token]["token_type"],
+            "email": email,
+            "scope": scope,
+            "exp": expires_in,
+            "token_type": token_type
         }, 200
     else:
         return {
@@ -148,42 +204,41 @@ def well_known():
 def mfa_user_endpoint():
     email = request.form.get("email")
 
-    # For demonstration purposes, we will assume that users with "mfa" in their email have MFA enabled
-    if email and email in MFA_USERS:
+    with closing(get_db()) as db:
+        cur = db.execute(
+            "SELECT 1 FROM mfa_users WHERE email = ?",
+            (email,)
+        )
+        row = cur.fetchone()
+
+    if row:
         print(f"User {email} has MFA enabled.")
-        return {
-            "mfa_enabled": True
-        }, 200
+        return {"mfa_enabled": True}, 200
     else:
         print(f"User {email} does not have MFA enabled.")
-        return {
-            "mfa_enabled": False
-        }, 200
+        return {"mfa_enabled": False}, 200
 
 
 @app.route("/mfa/register", methods=["POST"])
 def mfa_register_endpoint():
     email = request.form.get("email")
 
-    # For demonstration purposes, we will generate a dummy MFA secret and store it
-    # Generate a random 20-byte secret and encode it in base32
     secret = os.urandom(20)
-    secret_b32 = base64.b32encode(secret).decode('utf-8')
+    secret_b32 = base64.b32encode(secret).decode("utf-8")
 
-    # Store the MFA details for the user
-    MFA_USERS[email] = {
-        "mfa_secret": secret_b32,
-        "mfa_digits": 6,
-        "mfa_interval": 30
-    }
+    with closing(get_db()) as db:
+        db.execute("""
+            INSERT OR REPLACE INTO mfa_users
+            (email, mfa_secret, mfa_digits, mfa_interval)
+            VALUES (?, ?, ?, ?)
+        """, (email, secret_b32, 6, 30))
+        db.commit()
 
     print(f"Registered MFA for user {email} with secret {secret_b32}")
 
     otp_url = TOTP(secret_b32).generate_otp_url("MFAPortal", email)
 
-    return {
-        "otp_url": otp_url
-    }, 200
+    return {"otp_url": otp_url}, 200
 
 
 @app.route("/mfa/verify", methods=["POST"])
@@ -191,22 +246,25 @@ def mfa_verify_endpoint():
     email = request.form.get("email")
     mfa_code = request.form.get("mfa_code")
 
-    secret_b32 = MFA_USERS.get(email, {}).get("mfa_secret", "")
+    with closing(get_db()) as db:
+        cur = db.execute("""
+            SELECT mfa_secret FROM mfa_users WHERE email = ?
+        """, (email,))
+        row = cur.fetchone()
 
+    if not row:
+        print(f"No MFA enrollment found for {email}")
+        return {"mfa_verified": False}, 200
+
+    secret_b32 = row[0]
     totp = TOTP(secret_b32)
-    totp_code = totp.generate_totp()
 
-    # For demonstration purposes, we will accept any MFA code "123456"
-    if email in MFA_USERS and mfa_code == totp_code:
+    if totp.verify(mfa_code):
         print(f"MFA verification successful for user {email}")
-        return {
-            "mfa_verified": True
-        }, 200
+        return {"mfa_verified": True}, 200
     else:
         print(f"MFA verification failed for user {email}")
-        return {
-            "mfa_verified": False
-        }, 200
+        return {"mfa_verified": False}, 200
 
 
 if __name__ == "__main__":

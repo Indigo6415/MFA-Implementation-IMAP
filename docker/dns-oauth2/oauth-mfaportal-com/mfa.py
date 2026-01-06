@@ -46,7 +46,7 @@ class TOTP:
         totp = code_int % (10 ** digits)  # code_int % 1000000
         return f"{totp:0{digits}d}"  # 123984 e.g.
 
-    def verify(self, token):
+    def verify(self, token, interval=30, digits=6, window=1) -> bool:
         """
         Verify a provided TOTP token against the secret for the given timestamp.
 
@@ -67,10 +67,6 @@ class TOTP:
             key = base64.b32decode(self.secret, casefold=True)
         else:
             key = self.secret
-
-        interval = 30
-        digits = 6
-        window = 1  # check previous, current, and next interval
 
         # Base counter for provided timestamp
         base_counter = int(timestamp) // interval
