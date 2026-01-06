@@ -1,5 +1,6 @@
 from flask import Flask, render_template, request, redirect
 import secrets
+import base64
 import os
 
 app = Flask(__name__)
@@ -13,6 +14,8 @@ def service_not_available():
 
 # temporary in-memory store
 AUTH_CODES = {}
+# Store the mfa_secret + mfa_digits + mfa_interval for users with MFA enabled
+MFA_USERS = {}
 
 
 @app.route("/form", methods=["GET", "POST"])
@@ -122,6 +125,48 @@ def well_known():
     ), 200, {
         "Content-Type": "application/xml"
     }
+
+
+@app.route("/mfa/user", methods=["POST"])
+def mfa_user_endpoint():
+    email = request.form.get("email")
+
+    # For demonstration purposes, we will assume that users with "mfa" in their email have MFA enabled
+    if email and email in MFA_USERS:
+        print(f"User {email} has MFA enabled.")
+        return {
+            "mfa_enabled": True
+        }, 200
+    else:
+        print(f"User {email} does not have MFA enabled.")
+        return {
+            "mfa_enabled": False
+        }, 200
+
+
+@app.route("/mfa/register", methods=["POST"])
+def mfa_register_endpoint():
+    email = request.form.get("email")
+
+    # For demonstration purposes, we will generate a dummy MFA secret and store it
+    # Generate a random 20-byte secret and encode it in base32
+    secret = os.urandom(20)
+    secret_b32 = base64.b32encode(secret).decode('utf-8')
+
+    # Store the MFA details for the user
+    MFA_USERS[email] = {
+        "mfa_secret": secret_b32,
+        "mfa_digits": 6,
+        "mfa_interval": 30
+    }
+
+    print(f"Registered MFA for user {email} with secret {secret_b32}")
+
+    return {
+        "mfa_secret": secret_b32,
+        "mfa_digits": 6,
+        "mfa_interval": 30
+    }, 200
 
 
 if __name__ == "__main__":

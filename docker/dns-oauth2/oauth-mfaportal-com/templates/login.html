@@ -11,14 +11,24 @@
     <main>
         <h1>Login</h1>
         <p>Email: {{ email or 'Not provided' }}</p>
-        <form action="/form" method="post">
-            <label for="password">Password:</label>
-            <input type="hidden" id="email" name="email" value="{{ email }}">
-            <input type="password" id="password" name="password" required>
-            <button type="submit">Login</button>
-        </form>
-        <!-- mfa code laten zien als de user nog geen mfa heeft ingesteld, zo wel, 
-         dan alleen een inputbox met de vraag voor de huidige mfa code. -->
+        <label for="password">Password:</label>
+        <input type="hidden" id="email" name="email" value="{{ email }}">
+        <input type="password" id="password" name="password" required>
+        <button type="submit" id="continue-button">Login</button>
+        <!-- Stap 1: Maak javascript die detecteert of de knop is ingedrukt -->
+
+        <!-- Stap 2: Doe een api call naar /mfa/user met de email als data middels javascript (zodat je wel op dezelfde pagina blijft). -->
+
+        <!-- Stap 3: Als de api zegt dat user al mfa heeft, laat alleen de input box zien. 
+         Als de api zegt dat de user nog geen mfa heeft, laat de qr code zien en laat de user 1 keer de mfa code invoeren. -->
+
+        <!-- Stap 4: Als de user de qr code heeft gescant en de ingevoerde code is correct.
+          Verstuur een api call middels javascript naar /mfa/register met de email + mfa_secret + mfa_parameters en sla deze op -->
+
+        <!-- Stap 5: Als de code is ingevoerd moet deze worden gecheckt middels een api call. Als de api zegt dat de code valide is, 
+         dan moet er een post naar /form worden gestuurd met de email van de user in de form body. 
+         
+         Als de code invalide is, moet de gebruiker hem nogmaals invoeren.-->
     </main>
 </body>
 
