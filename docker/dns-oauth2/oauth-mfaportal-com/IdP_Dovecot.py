@@ -48,6 +48,7 @@ def init_db():
         db.commit()
 
 
+# Initialize the database
 init_db()
 
 
@@ -92,23 +93,26 @@ def form_redirect():
 @app.route("/token", methods=["POST"])
 def token_endpoint():
     print("Received /token request")
-    # Log all incoming arguments for debugging
-    form_payload = request.form.to_dict(flat=False)
-    query_params = request.args.to_dict(flat=False)
-    json_payload = request.get_json(silent=True)
 
-    print("/token request form:", form_payload)
-    print("/token request args:", query_params)
-    print("/token request json:", json_payload)
+    # Debug logging
+    print("/token request form:", request.form.to_dict(flat=False))
+    print("/token request args:", request.args.to_dict(flat=False))
+    print("/token request json:", request.get_json(silent=True))
 
     code = request.form.get("code")
     refresh_token = request.form.get("refresh_token")
-    access_token = None
-    email = None
 
-    # If an authorization code is provided, validate it, issue tokens (access, refresh)
+    # OAuth requires exactly one grant type per request
+    if bool(code) == bool(refresh_token):
+        return {
+            "error": "invalid_request",
+            "error_description": "Provide exactly one of 'code' or 'refresh_token'."
+        }, 400
+
+    # ------------------------------------------------------------
+    # AUTHORIZATION CODE GRANT
+    # ------------------------------------------------------------
     if code:
-        # Validate authorization code
         with closing(get_db()) as db:
             cur = db.execute(
                 "SELECT email FROM auth_codes WHERE code = ?",
@@ -116,56 +120,23 @@ def token_endpoint():
             )
             row = cur.fetchone()
 
-        # If valid, issue tokens
-        if row:
+            if not row:
+                return {
+                    "error": "invalid_grant",
+                    "error_description": "Authorization code is invalid or expired."
+                }, 400
+
             email = row[0]
-            print("Valid auth code received for email:", email)
 
-            access_token = secrets.token_urlsafe(32)
-            refresh_token = secrets.token_urlsafe(32)
-
-        # Remove used authorization code
-        with closing(get_db()) as db:
+            # One-time use: delete immediately
             db.execute(
                 "DELETE FROM auth_codes WHERE code = ?",
                 (code,)
             )
-            db.commit()
-
-        # Store issued tokens
-        with closing(get_db()) as db:
-            db.execute("""
-                INSERT INTO issued_tokens
-                (access_token, email, refresh_token, token_type, expires_in, scope)
-                VALUES (?, ?, ?, ?, ?, ?)
-            """, (
-                access_token,
-                email,
-                refresh_token,
-                "Bearer",
-                3600,
-                "test_mail test_addressbook test_calendar"
-            ))
-            db.commit()
-
-    # If a refresh token is provided, validate it and issue a new access token
-    elif refresh_token:
-        with closing(get_db()) as db:
-            cur = db.execute(
-                "SELECT email FROM issued_tokens WHERE refresh_token = ?",
-                (refresh_token,)
-            )
-            row = cur.fetchone()
-
-        # If valid, issue new access token
-        if row:
-            email = row[0]
-            print("Valid refresh token received for email:", email)
 
             access_token = secrets.token_urlsafe(32)
+            refresh_token = secrets.token_urlsafe(32)
 
-        # Store new access token with the same refresh token
-        with closing(get_db()) as db:
             db.execute("""
                 INSERT INTO issued_tokens
                 (access_token, email, refresh_token, token_type, expires_in, scope)
@@ -178,14 +149,50 @@ def token_endpoint():
                 3600,
                 "test_mail test_addressbook test_calendar"
             ))
+
             db.commit()
 
-    # If neither code nor refresh token is valid, return an error
-    else:
         return {
-            "error": "invalid_request",
-            "error_description": "No valid authorization code or refresh token provided."
-        }, 400
+            "access_token": access_token,
+            "refresh_token": refresh_token,
+            "token_type": "Bearer",
+            "expires_in": 3600,
+            "scope": "test_mail test_addressbook test_calendar"
+        }, 200
+
+    # ------------------------------------------------------------
+    # REFRESH TOKEN GRANT
+    # ------------------------------------------------------------
+    with closing(get_db()) as db:
+        cur = db.execute(
+            "SELECT email FROM issued_tokens WHERE refresh_token = ?",
+            (refresh_token,)
+        )
+        row = cur.fetchone()
+
+        if not row:
+            return {
+                "error": "invalid_grant",
+                "error_description": "Refresh token is invalid."
+            }, 400
+
+        email = row[0]
+        access_token = secrets.token_urlsafe(32)
+
+        db.execute("""
+            INSERT INTO issued_tokens
+            (access_token, email, refresh_token, token_type, expires_in, scope)
+            VALUES (?, ?, ?, ?, ?, ?)
+        """, (
+            access_token,
+            email,
+            refresh_token,
+            "Bearer",
+            3600,
+            "test_mail test_addressbook test_calendar"
+        ))
+
+        db.commit()
 
     return {
         "access_token": access_token,
