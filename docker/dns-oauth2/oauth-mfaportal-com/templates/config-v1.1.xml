@@ -22,12 +22,13 @@
       <username>{{ email or '%EMAILADDRESS%' }}</username>
     </outgoingServer>
 
+<!-- TODO Find out what these endpoints do-->
     <oauth2>
       <issuer>https://test.test</issuer>
       <authorizationEndpoint>https://test.test/oauth2/authorize</authorizationEndpoint>
       <tokenEndpoint>https://test.test/oauth2/token</tokenEndpoint>
       <scope>openid email profile</scope>
     </oauth2>
-
+<!-- TODO -->
   </emailProvider>
 </clientConfig>
