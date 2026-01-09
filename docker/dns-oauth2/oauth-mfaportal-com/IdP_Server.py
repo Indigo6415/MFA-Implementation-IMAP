@@ -327,17 +327,6 @@ def mfa_verify_endpoint():
 
 
 if __name__ == "__main__":
-    cert_file = os.getenv("SSL_CERT_FILE", "cert.pem")
-    key_file = os.getenv("SSL_KEY_FILE", "key.pem")
-    # NOTE
-    # Dovecot only accepts verified ssl certificates. Port 80, no ssl.
-    # Thunberbird only accepts encrypted https. Port 443, ssl (may be self-signed).
-    # NOTE
-    port = int(os.getenv("PORT", "443"))
-
     app.run(
-        debug=True,
-        host="127.0.0.1",
-        port=port,
-        ssl_context=(cert_file, key_file),
+        port=5000
     )

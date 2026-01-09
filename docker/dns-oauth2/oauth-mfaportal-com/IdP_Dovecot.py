@@ -10,7 +10,8 @@ from mfa import TOTP
 app = Flask(__name__)
 app.secret_key = os.urandom(24)
 
-DB_PATH = "auth.db"
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DB_PATH = os.path.join(BASE_DIR, "auth.db")
 # Authorization codes are short-lived; store them in SQLite as well
 
 

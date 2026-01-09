@@ -102,27 +102,3 @@ class TOTP:
         # Setup OTP URL
         otp_url = f"otpauth://totp/{issuer}:{account_name}?secret={self.secret}&issuer={issuer}&digits=6&period=30"
         return otp_url
-
-
-if __name__ == "__main__":
-    # Generate a random 20-byte secret and encode it in base32
-    secret = os.urandom(20)
-    secret_b32 = base64.b32encode(secret).decode('utf-8')
-
-    # Initialize TOTP with the generated secret and print a demo code
-    totp = TOTP(secret_b32)
-    totp_code = totp.generate_totp()
-    print("Secret (base32):", secret_b32)
-    print("TOTP:", totp_code)
-    print("TOTP verification:", totp.verify(totp_code))
-
-    # Generate QR code for TOTP setup
-    issuer = "ExampleApp"
-    account_name = "ExampleAccountName"
-    totp.generate_totp_qr(issuer, account_name)
-
-    # Interactive TOTP verification
-    while True:
-        user_totp = input("Enter TOTP code to verify: ")
-        print(
-            f"TOTP verification: {"Valid" if totp.verify(user_totp) else "Invalid"}")
