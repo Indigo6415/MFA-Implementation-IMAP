@@ -1,3 +1,5 @@
 totp_qr.png
 venv
 .venv
+docker/dns-oauth2/oauth-mfaportal-com/__pycache__/mfa.cpython-311.pyc
+docker/dns-oauth2/oauth-mfaportal-com/auth.db

@@ -1,115 +1,191 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
-
 <head>
-    <meta charset="utf-8">
-    <title>Login</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MFA Login</title>
+
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 
 <body>
-    <main>
-        <h1>Login</h1>
+  <main>
+    <div class="auth-card">
+      <header class="auth-header">
+        <h1>MFA Portal</h1>
+        <p class="subtitle">Secure sign-in for <strong>{{ email }}</strong></p>
+      </header>
 
-        <p>Email: {{ email or 'Not provided' }}</p>
+      <!-- Stepper (visual only) -->
+      <ol class="stepper" aria-label="Login steps">
+        <li class="step active" id="stepper-1">
+          <span class="step-dot" aria-hidden="true"></span>
+          <span class="step-label">Sign in</span>
+        </li>
+        <li class="step" id="stepper-2">
+          <span class="step-dot" aria-hidden="true"></span>
+          <span class="step-label">Verify</span>
+        </li>
+        <li class="step" id="stepper-3">
+          <span class="step-dot" aria-hidden="true"></span>
+          <span class="step-label">Done</span>
+        </li>
+      </ol>
 
-        <input type="hidden" id="email" value="{{ email }}">
+      <!-- Hidden email input (JS reads #email) -->
+      <input type="hidden" id="email" value="{{ email }}">
 
-        <!-- Password step (cosmetic only in your demo) -->
-        <div id="password-step">
-            <label>Password:</label>
-            <input type="password">
-            <button type="button" id="login-btn">Login</button>
+      <!-- STEP 1 -->
+      <section id="password-step" class="step-panel">
+        <h2>Enter your password</h2>
+        <p class="muted">
+          This password step is cosmetic for now.
+        </p>
+
+        <div class="field">
+          <label for="password">Password</label>
+          <input id="password" type="password" placeholder="••••••••" autocomplete="current-password">
         </div>
 
-        <!-- MFA step -->
-        <div id="mfa-step" style="display:none;">
-            <div id="qr-wrapper" style="display:none;">
-                <p>Scan this QR code with your authenticator app:</p>
-                <img id="qr-image" alt="MFA QR">
-            </div>
+        <!-- JS listens on #login-btn -->
+        <button id="login-btn" class="primary-btn" type="button">
+          Continue
+        </button>
 
-            <label>MFA code:</label>
-            <input type="text" id="mfa-code" inputmode="numeric" autocomplete="one-time-code">
-            <button type="button" id="verify-btn">Verify</button>
+        <p class="fineprint">
+          By continuing, you confirm you are authorized to access this system.
+        </p>
+      </section>
 
-            <p id="mfa-error" style="color:red; display:none;">
-                Invalid MFA code. Try again.
+      <!-- STEP 2 -->
+      <section id="mfa-step" class="step-panel" style="display:none;">
+        <h2>Multi-Factor Authentication</h2>
+        <p class="muted">
+          Open your authenticator app and enter the 6-digit code.
+        </p>
+
+        <!-- QR wrapper (JS togglet display block) -->
+        <div id="qr-wrapper" class="qr-box" style="display:none;">
+          <div class="qr-text">
+            <h3>Set up your authenticator</h3>
+            <p class="muted">
+              Scan this QR code in Google Authenticator, Microsoft Authenticator, or any TOTP app.
             </p>
+          </div>
+
+          <!-- JS set src on #qr-image -->
+          <img id="qr-image" class="qr-image" alt="MFA QR code">
         </div>
 
-        <!-- Final hidden submit -->
-        <form id="final-form" method="post" action="/form" style="display:none;">
-            <input type="hidden" name="email" id="final-email">
-        </form>
-    </main>
+        <div class="field">
+          <label for="mfa-code">Authentication code</label>
+          <input
+            id="mfa-code"
+            type="text"
+            inputmode="numeric"
+            autocomplete="one-time-code"
+            placeholder="123456"
+            maxlength="6"
+          >
+        </div>
 
-    <script>
-        const email = document.getElementById('email').value;
+        <!-- JS listens on #verify-btn -->
+        <button id="verify-btn" class="primary-btn" type="button">
+          Verify
+        </button>
 
-        document.getElementById('login-btn').addEventListener('click', async () => {
+        <!-- JS set display block by error -->
+        <div id="mfa-error" class="error-box" style="display:none;" role="alert" aria-live="polite">
+          The code is invalid or expired. Please try again.
+        </div>
 
-            const res = await fetch('/mfa/user', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                body: new URLSearchParams({ email })
-            });
+        <div class="help-row">
+          <span class="muted">Tip:</span>
+          <span class="muted">Codes refresh every 30 seconds.</span>
+        </div>
+      </section>
 
-            const data = await res.json();
+      <!-- FINAL FORM (JS set #final-email and submit) -->
+      <form id="final-form" method="POST" action="/form" style="display:none;">
+        <input type="hidden" id="final-email" name="email" value="">
+      </form>
+    </div>
+  </main>
 
-            document.getElementById('password-step').style.display = 'none';
-            document.getElementById('mfa-step').style.display = 'block';
+  <!-- JS script -->
+  <script>
+    const email = document.getElementById('email').value;
 
-            if (!data.mfa_enabled) {
-                await registerMFA();
-            }
-        });
+    document.getElementById('login-btn').addEventListener('click', async () => {
 
-        async function registerMFA() {
-            const res = await fetch('/mfa/register', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                body: new URLSearchParams({ email })
-            });
+      const res = await fetch('/mfa/user', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({ email })
+      });
 
-            const data = await res.json();
+      const data = await res.json();
 
-            /*
-              otp_url is an otpauth:// URI
-              Convert to QR using Google Charts (client-side only)
-            */
-            const qrUrl =
-                'https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=' +
-                encodeURIComponent(data.otp_url);
+      document.getElementById('password-step').style.display = 'none';
+      document.getElementById('mfa-step').style.display = 'block';
 
-            document.getElementById('qr-image').src = qrUrl;
-            document.getElementById('qr-wrapper').style.display = 'block';
-        }
+      // (Optional UX) stepper update
+      document.getElementById('stepper-1').classList.remove('active');
+      document.getElementById('stepper-1').classList.add('done');
 
-        document.getElementById('verify-btn').addEventListener('click', async () => {
-            const mfaCode = document.getElementById('mfa-code').value;
+      document.getElementById('stepper-2').classList.add('active');
 
-            const res = await fetch('/mfa/verify', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                body: new URLSearchParams({
-                    email,
-                    mfa_code: mfaCode
-                })
-            });
+      if (!data.mfa_enabled) {
+        await registerMFA();
+      }
+    });
 
-            const data = await res.json();
+    async function registerMFA() {
+      const res = await fetch('/mfa/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({ email })
+      });
 
-            if (!data.mfa_verified) {
-                document.getElementById('mfa-error').style.display = 'block';
-                return;
-            }
+      const data = await res.json();
 
-            // Final login
-            document.getElementById('final-email').value = email;
-            document.getElementById('final-form').submit();
-        });
-    </script>
+      const qrUrl =
+        'https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=' +
+        encodeURIComponent(data.otp_url);
+
+      document.getElementById('qr-image').src = qrUrl;
+      document.getElementById('qr-wrapper').style.display = 'block';
+    }
+
+    document.getElementById('verify-btn').addEventListener('click', async () => {
+      const mfaCode = document.getElementById('mfa-code').value;
+
+      const res = await fetch('/mfa/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          email,
+          mfa_code: mfaCode
+        })
+      });
+
+      const data = await res.json();
+
+      if (!data.mfa_verified) {
+        document.getElementById('mfa-error').style.display = 'block';
+        return;
+      }
+
+      // (Optional UX) stepper update
+      document.getElementById('stepper-2').classList.remove('active');
+      document.getElementById('stepper-2').classList.add('done');
+
+      document.getElementById('stepper-3').classList.add('active');
+
+      // Final login
+      document.getElementById('final-email').value = email;
+      document.getElementById('final-form').submit();
+    });
+  </script>
 </body>
-
 </html>
