@@ -119,6 +119,18 @@
       <form id="final-form" method="POST" action="/form" style="display:none;">
         <input type="hidden" id="final-email" name="email" value="">
       </form>
+
+      <footer class="auth-logos">
+        <span class="logos-label">In cooperation with</span>
+        <div class="logos">
+           <img src="{{ url_for('static', filename='logos/Politie.png') }}"
+                alt="Opdrachtgever 1 logo">
+
+          <img src="{{ url_for('static', filename='logos/HostingIndustries.jpg') }}"
+              alt="Opdrachtgever 2 logo">
+        </div>
+      </footer>
+
     </div>
   </main>
 

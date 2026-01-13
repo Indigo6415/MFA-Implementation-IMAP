@@ -316,3 +316,41 @@ input:disabled{
   font-weight: 700;
   color: #052e16;
 }
+
+/* =========================
+   Co-branding logos
+========================= */
+.auth-logos{
+  margin-top: 22px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+  text-align: center;
+}
+
+.logos-label{
+  display: block;
+  margin-bottom: 10px;
+  font-size: .8rem;
+  color: var(--muted-2);
+  letter-spacing: .02em;
+}
+
+.logos{
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 18px;
+}
+
+.logos img{
+  max-height: 36px;
+  max-width: 120px;
+  opacity: .85;
+  filter: grayscale(100%);
+  transition: opacity .2s ease, filter .2s ease;
+}
+
+.logos img:hover{
+  opacity: 1;
+  filter: grayscale(0%);
+}
