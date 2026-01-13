@@ -45,6 +45,16 @@
         <div class="field">
           <label for="password">Password</label>
           <input id="password" type="password" placeholder="••••••••" autocomplete="current-password">
+          <script>
+            const passwordInput = document.getElementById('password');
+
+            passwordInput.addEventListener('keydown', (e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                document.getElementById('login-btn').click();
+              }
+            });
+          </script>
         </div>
 
         <!-- JS listens on #login-btn -->
@@ -185,7 +195,27 @@
       // Final login
       document.getElementById('final-email').value = email;
       document.getElementById('final-form').submit();
-    });
+    const mfaInput = document.getElementById('mfa-code');
+  });
+
+  const mfaInput = document.getElementById('mfa-code');
+  let mfaSubmitting = false;
+
+  mfaInput.addEventListener('input', () => {
+    // Only numbers allowed
+    const clean = mfaInput.value.replace(/\D/g, '').slice(0, 6);
+    mfaInput.value = clean;
+
+    // Exact 6 numbers + do not submit yet
+    if (clean.length === 6 && !mfaSubmitting) {
+      mfaSubmitting = true;
+
+      // Small timeout for mobile keyboards / UI flush
+      setTimeout(() => {
+        document.getElementById('verify-btn').click();
+      }, 50);
+    }
+  });
   </script>
 </body>
 </html>
