@@ -21,6 +21,17 @@ def get_db():
     return sqlite3.connect(DB_PATH)
 
 
+def ensure_mfa_confirmed_column(db):
+    cur = db.execute("PRAGMA table_info(mfa_users)")
+    columns = [row[1] for row in cur.fetchall()]
+
+    if "mfa_confirmed" not in columns:
+        print("[DB] Migrating: adding mfa_confirmed column to mfa_users")
+        db.execute(
+            "ALTER TABLE mfa_users ADD COLUMN mfa_confirmed INTEGER DEFAULT 0"
+        )
+
+
 def init_db():
     with closing(get_db()) as db:
         db.execute("""
@@ -31,6 +42,9 @@ def init_db():
                 mfa_interval INTEGER NOT NULL
             )
         """)
+
+        ensure_mfa_confirmed_column(db)
+
         db.execute("""
             CREATE TABLE IF NOT EXISTS issued_tokens (
                 access_token TEXT PRIMARY KEY,
