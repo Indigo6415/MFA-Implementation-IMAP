@@ -278,6 +278,10 @@ input:disabled{
   font-size: .88rem;
 }
 
+.hidden { 
+  display: none !important; 
+}
+
 /* =========================
    Responsive
 ========================= */

@@ -1,7 +1,9 @@
-from flask import Flask, render_template, request, redirect
+from flask import Flask, render_template, request, redirect, Response
 import secrets
 import base64
 import os
+import qrcode
+import io
 import sqlite3
 from contextlib import closing
 
@@ -263,19 +265,38 @@ def well_known():
 def mfa_user_endpoint():
     email = request.form.get("email")
 
+    if not email:
+        return {"error": "email_required"}, 400
+
     with closing(get_db()) as db:
-        cur = db.execute(
-            "SELECT 1 FROM mfa_users WHERE email = ?",
-            (email,)
-        )
+        cur = db.execute("""
+            SELECT mfa_confirmed
+            FROM mfa_users
+            WHERE email = ?
+        """, (email,))
         row = cur.fetchone()
 
-    if row:
-        print(f"User {email} has MFA enabled.")
-        return {"mfa_enabled": True}, 200
-    else:
-        print(f"User {email} does not have MFA enabled.")
-        return {"mfa_enabled": False}, 200
+    # No MFA-record → MFA not enrolled yet
+    if not row:
+        print(f"[MFA] {email}: no MFA enrollment")
+        return {
+            "mfa_status": "none"
+        }, 200
+
+    mfa_confirmed = row[0]
+
+    # Secret exists, but isn't confirmed yet
+    if mfa_confirmed == 0:
+        print(f"[MFA] {email}: enrollment pending")
+        return {
+            "mfa_status": "pending"
+        }, 200
+
+    # MFA is active
+    print(f"[MFA] {email}: MFA active")
+    return {
+        "mfa_status": "active"
+    }, 200
 
 
 @app.route("/mfa/register", methods=["POST"])
@@ -288,8 +309,8 @@ def mfa_register_endpoint():
     with closing(get_db()) as db:
         db.execute("""
             INSERT OR REPLACE INTO mfa_users
-            (email, mfa_secret, mfa_digits, mfa_interval)
-            VALUES (?, ?, ?, ?)
+            (email, mfa_secret, mfa_digits, mfa_interval, mfa_confirmed)
+            VALUES (?, ?, ?, ?, 0)
         """, (email, secret_b32, 6, 30))
         db.commit()
 
@@ -298,6 +319,48 @@ def mfa_register_endpoint():
     otp_url = TOTP(secret_b32).generate_otp_url("MFAPortal", email)
 
     return {"otp_url": otp_url}, 200
+
+
+@app.route("/mfa/qr", methods=["GET"])
+def mfa_qr_endpoint():
+    email = request.args.get("email")
+
+    if not email:
+        return {"error": "email_required"}, 400
+
+    with closing(get_db()) as db:
+        cur = db.execute("""
+            SELECT mfa_secret, mfa_digits, mfa_interval, mfa_confirmed
+            FROM mfa_users
+            WHERE email = ?
+        """, (email,))
+        row = cur.fetchone()
+
+    if not row:
+        return {"error": "MFA not registered"}, 400
+
+    mfa_secret, digits, interval, confirmed = row
+
+    # QR only shows while enrolling..
+    if confirmed == 1:
+        return {"error": "MFA already confirmed"}, 403
+
+    totp = TOTP(mfa_secret)
+    otp_url = totp.generate_otp_url("MFAPortal", email)
+
+    img = qrcode.make(otp_url)
+
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    buf.seek(0)
+
+    return Response(
+        buf.getvalue(),
+        mimetype="image/png",
+        headers={
+            "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0"
+        }
+    )
 
 
 @app.route("/mfa/verify", methods=["POST"])
@@ -319,6 +382,14 @@ def mfa_verify_endpoint():
     totp = TOTP(secret_b32)
 
     if totp.verify(mfa_code):
+        with closing(get_db()) as db:
+            db.execute("""
+                UPDATE mfa_users
+                SET mfa_confirmed = 1
+                WHERE email = ?
+            """, (email,))
+            db.commit()
+
         print(f"MFA verification successful for user {email}")
         return {"mfa_verified": True}, 200
     else:
