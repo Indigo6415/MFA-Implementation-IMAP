@@ -1,4 +1,5 @@
-from flask import Flask, render_template, request, redirect, Response
+from flask import Flask, render_template, request, redirect, Response, session
+from werkzeug.security import check_password_hash, generate_password_hash
 import secrets
 import base64
 import os
@@ -62,11 +63,25 @@ def init_db():
                 created_at INTEGER NOT NULL
             )
         """)
+        db.execute("""
+            CREATE TABLE IF NOT EXISTS admin_users (
+            username TEXT PRIMARY KEY,
+            password_hash TEXT NOT NULL,
+            mfa_secret TEXT,
+            mfa_confirmed INTEGER DEFAULT 0
+            )
+        """)
+        
         db.commit()
 
 
 # Initialize the database
 init_db()
+
+
+def require_admin():
+    if not session.get("admin_authenticated"):
+        return redirect("/admin/login")
 
 
 @app.route("/", methods=["GET"])
@@ -410,6 +425,226 @@ def mfa_verify_endpoint():
         print(f"MFA verification failed for user {email}")
         return {"mfa_verified": False}, 200
 
+
+# ------------------------------------------------------------
+# Administrator panel - admin authentication
+# ------------------------------------------------------------
+@app.route("/admin/login", methods=["GET", "POST"])
+def admin_login():
+    if request.method == "GET":
+        return render_template("admin_login.html")
+
+    username = request.form.get("username")
+    password = request.form.get("password")
+
+    with closing(get_db()) as db:
+        cur = db.execute("""
+            SELECT password_hash
+            FROM admin_users
+            WHERE username = ?
+        """, (username,))
+        row = cur.fetchone()
+
+    if not row or not check_password_hash(row[0], password):
+        return render_template(
+            "admin_login.html",
+            error="Invalid credentials"
+        )
+
+    # Password correct → MFA step
+    session["admin_pending"] = username
+    return redirect("/admin/mfa")
+    
+
+@app.route("/admin/mfa", methods=["GET", "POST"])
+def admin_mfa():
+    username = session.get("admin_pending")
+    if not username:
+        return redirect("/admin/login")
+
+    with closing(get_db()) as db:
+        cur = db.execute("""
+            SELECT mfa_secret, mfa_confirmed
+            FROM admin_users
+            WHERE username = ?
+        """, (username,))
+        row = cur.fetchone()
+
+    mfa_secret, confirmed = row
+
+    if request.method == "GET":
+
+    # MFA init: generate secret once
+        if not mfa_secret:
+            secret = base64.b32encode(os.urandom(20)).decode()
+            with closing(get_db()) as db:
+                db.execute("""
+                    UPDATE admin_users
+                    SET mfa_secret = ?, mfa_confirmed = 0
+                    WHERE username = ?
+                """, (secret, username))
+                db.commit()
+
+        return render_template(
+            "admin_mfa.html",
+            username=username,
+            mfa_confirmed=bool(confirmed)
+        )
+
+    # POST → verify TOTP
+    code = request.form.get("mfa_code")
+
+    # First time → initialisatie
+    if not mfa_secret:
+        secret = base64.b32encode(os.urandom(20)).decode()
+        totp = TOTP(secret)
+
+        if not totp.verify(code):
+            return render_template(
+                "admin_mfa.html",
+                error="Invalid code",
+                mfa_confirmed=False
+            )
+
+        with closing(get_db()) as db:
+            db.execute("""
+                UPDATE admin_users
+                SET mfa_secret = ?, mfa_confirmed = 1
+                WHERE username = ?
+            """, (secret, username))
+            db.commit()
+
+    else:
+        totp = TOTP(mfa_secret)
+        if not totp.verify(code):
+            return render_template(
+                "admin_mfa.html",
+                error="Invalid code",
+                mfa_confirmed=True
+            )
+         # MFA correct → confirm
+        with closing(get_db()) as db:
+            db.execute("""
+                UPDATE admin_users
+                SET mfa_confirmed = 1
+                WHERE username = ?
+            """, (username,))
+            db.commit()
+
+    # MFA OK → admin fully authenticated
+    session.pop("admin_pending", None)
+    session["admin_authenticated"] = True
+    session["admin_user"] = username
+
+    return redirect("/admin/dashboard")
+
+
+@app.route("/admin/qr", methods=["GET"])
+def admin_qr():
+    username = session.get("admin_pending")
+    if not username:
+        return "", 403
+
+    with closing(get_db()) as db:
+        cur = db.execute("""
+            SELECT mfa_secret
+            FROM admin_users
+            WHERE username = ?
+        """, (username,))
+        row = cur.fetchone()
+
+    secret = row[0]
+
+    if not secret:
+        return "", 400
+
+    totp = TOTP(secret)
+    otp_url = totp.generate_otp_url("AdminPortal", username)
+
+    img = qrcode.make(otp_url)
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    buf.seek(0)
+
+    return Response(
+        buf.getvalue(),
+        mimetype="image/png",
+        headers={"Cache-Control": "no-store"}
+    )
+
+
+@app.route("/admin/logout", methods=["POST"])
+def admin_logout():
+    session.clear()
+    return redirect("/admin/login")
+
+
+# ------------------------------------------------------------
+# Administrator panel - admin dashboard
+# ------------------------------------------------------------
+@app.route("/admin/dashboard")
+def admin_dashboard():
+    if not session.get("admin_authenticated"):
+        return redirect("/admin/login")
+
+    users = []
+
+    with closing(get_db()) as db:
+        cur = db.execute("""
+            SELECT u.email,
+                   CASE
+                     WHEN m.email IS NULL THEN 'none'
+                     WHEN m.mfa_confirmed = 0 THEN 'pending'
+                     ELSE 'active'
+                   END AS mfa_status
+            FROM (
+                SELECT DISTINCT email FROM issued_tokens
+                UNION
+                SELECT DISTINCT email FROM mfa_users
+            ) u
+            LEFT JOIN mfa_users m ON u.email = m.email
+            ORDER BY u.email
+        """)
+
+        for row in cur.fetchall():
+            users.append({
+                "email": row[0],
+                "mfa_status": row[1]
+            })
+
+    return render_template("admin_dashboard.html", users=users)
+
+
+@app.route("/admin/user/challenge", methods=["POST"])
+def admin_force_challenge():
+    if not session.get("admin_authenticated"):
+        return redirect("/admin/login")
+
+    email = request.form.get("email")
+
+    with closing(get_db()) as db:
+        db.execute(
+            "DELETE FROM issued_tokens WHERE email = ?",
+            (email,)
+        )
+        db.commit()
+
+    return redirect("/admin/dashboard")
+
+
+@app.route("/admin/user/reset", methods=["POST"])
+def admin_force_reset():
+    if not session.get("admin_authenticated"):
+        return redirect("/admin/login")
+
+    email = request.form.get("email")
+
+    with closing(get_db()) as db:
+        db.execute("DELETE FROM issued_tokens WHERE email = ?", (email,))
+        db.execute("DELETE FROM mfa_users WHERE email = ?", (email,))
+        db.commit()
+
+    return redirect("/admin/dashboard")
 
 if __name__ == "__main__":
     cert_file = os.getenv("SSL_CERT_FILE", "cert.pem")

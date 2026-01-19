@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Admin Dashboard</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+
+<body>
+
+<div class="admin-shell">
+
+  <!-- Header -->
+  <header class="admin-header admin-wide">
+    <div>
+      <h1>Admin Dashboard</h1>
+      <p class="subtitle">Identity Provider Management</p>
+    </div>
+
+    <form method="post" action="/admin/logout">
+      <button class="secondary-btn">Logout</button>
+    </form>
+  </header>
+
+  <!-- Main content -->
+  <main class="admin-main admin-wide">
+
+    <!-- USER MANAGEMENT -->
+    <section class="admin-section">
+      <h2>User Management</h2>
+
+      <table class="admin-table">
+        <thead>
+          <tr>
+            <th>User</th>
+            <th>MFA status</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+        {% for user in users %}
+          <tr>
+            <td>{{ user.email }}</td>
+            <td>
+              <span class="status {{ user.mfa_status }}">
+                {{ user.mfa_status }}
+              </span>
+            </td>
+            <td>
+              <form method="post" action="/admin/user/challenge" class="inline">
+                <input type="hidden" name="email" value="{{ user.email }}">
+                <button class="secondary-btn">Force challenge</button>
+              </form>
+
+              <form method="post" action="/admin/user/reset" class="inline">
+                <input type="hidden" name="email" value="{{ user.email }}">
+                <button class="danger-btn">Reset MFA</button>
+              </form>
+            </td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </section>
+
+    <!-- AUDIT LOG (placeholder) -->
+    <section class="admin-section">
+      <h2>Audit Log</h2>
+      <p class="muted">
+        Security-relevant administrative actions will appear here.
+      </p>
+
+      <div class="muted" style="font-size:.85rem">
+        No audit events recorded yet.
+      </div>
+    </section>
+
+  </main>
+
+</div>
+
+</body>
+</html>

@@ -178,3 +178,20 @@ If you see some red text, then open the security tab again and it should change 
 At this point you can open your `inbox` and check the bottom left for the status messages. You should also see your `trash` appear below your inbox if everything worked as it should.
 
 >You might need to sign in again and provide another mfa code, before you see your inbox and trash.
+
+
+# Do you want to use the admin panel??..
+
+For now, the admin panel can be accessed through: https://127.0.0.1/admin/login.
+For this you wil need an admin + corresponding password.
+Generate the correct hash in the `hash.py` and paste this in an SQL query.
+for example:
+
+```
+INSERT INTO admin_users (username, password_hash)
+VALUES (
+  'admin',
+  'scrypt:32768:8:1$Y2urQBqbzJHwL9CA$f260c07c01a1cab50f6fa06634b2b64b05a4fe77d1f5a2bc73c201ba4fc88b058ddce1276580f48e88aa15fc51a43aa0e7fdf8f8c743a1af534b116e26bc5127'
+);
+```
+Now you can access the admin panel with an admin account

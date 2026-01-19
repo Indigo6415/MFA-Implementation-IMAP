@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Admin Login</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+
+<body>
+<main>
+  <div class="auth-card">
+
+    <header class="auth-header">
+      <h1>Admin Portal</h1>
+      <p class="subtitle">Administrator sign-in</p>
+    </header>
+
+    <section class="step-panel">
+      <h2>Sign in</h2>
+
+      {% if error %}
+        <div class="error-box">{{ error }}</div>
+      {% endif %}
+
+      <div class="field">
+        <label>Username</label>
+        <input name="username" form="admin-login-form" required>
+      </div>
+
+      <div class="field">
+        <label>Password</label>
+        <input type="password" name="password"
+               form="admin-login-form" required>
+      </div>
+
+      <form id="admin-login-form" method="post">
+        <button class="primary-btn">Continue</button>
+      </form>
+    </section>
+
+  </div>
+</main>
+</body>
+</html>
