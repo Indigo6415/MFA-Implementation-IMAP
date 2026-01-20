@@ -5,6 +5,7 @@ oauth2 {
 	# Token validation
 	introspection_mode = post
 	introspection_url = http://host.docker.internal/token/verify
+	#introspection_url = https://oauth.mfaportal.com/token/verify
 	# Optional tokeninfo endpoint; leave empty if not used
 	#tokeninfo_url =
 

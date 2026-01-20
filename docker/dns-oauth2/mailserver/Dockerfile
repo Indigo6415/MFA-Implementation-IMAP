@@ -21,6 +21,9 @@ RUN groupadd -g 5000 vmail \
     && chown -R vmail:vmail /var/mail
 
 COPY conf/ /etc/dovecot/
+# Copy Localhost SSL certificates
+COPY ./cert.pem /etc/ssl/certs/dovecot.pem
+COPY ./key.pem /etc/ssl/private/dovecot.key
 
 EXPOSE 143 993
 
