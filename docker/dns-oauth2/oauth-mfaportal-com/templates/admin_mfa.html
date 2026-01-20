@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Admin MFA</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+
+<body>
+<main>
+  <div class="auth-card">
+
+    <header class="auth-header">
+      <h1>Admin Verification</h1>
+      <p class="subtitle">Multi-factor authentication required</p>
+    </header>
+
+    <section class="step-panel">
+
+      {% if not mfa_confirmed %}
+        <h2>Set up MFA</h2>
+        <p class="muted">
+          Scan the QR code using your authenticator app.
+        </p>
+
+        <div class="qr-box">
+          <img src="/admin/qr" class="qr-image" alt="Admin MFA QR">
+        </div>
+      {% else %}
+        <h2>Verify</h2>
+        <p class="muted">
+          Enter the authentication code from your app.
+        </p>
+      {% endif %}
+
+      {% if error %}
+        <div class="error-box">{{ error }}</div>
+      {% endif %}
+
+      <form method="post">
+        <div class="field">
+          <label>Authentication code</label>
+          <input name="mfa_code"
+                 inputmode="numeric"
+                 autocomplete="one-time-code"
+                 placeholder="123456"
+                 required>
+        </div>
+
+        <button class="primary-btn">Verify</button>
+      </form>
+
+    </section>
+
+  </div>
+</main>
+</body>
+</html>
